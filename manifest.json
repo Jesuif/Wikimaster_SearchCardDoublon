@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "WikiMasters Doublons",
+  "version": "1.0",
+  "description": "Lit toute ma collection WikiMasters et trouve mes doublons.",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.wiki-masters.com/*",
+        "https://wiki-masters.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["style.css"]
+    }
+  ]
+}

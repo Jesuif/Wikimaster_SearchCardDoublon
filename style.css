@@ -1,0 +1,72 @@
+/* Le panneau flottant, en bas à droite de l'écran */
+#wmd-panneau {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;          /* passe au-dessus de tout le site */
+  width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 12px;
+  background: #1b1d1b;
+  color: #f2f2f2;
+  border: 1px solid #3a3d3a;
+  border-radius: 10px;
+  font: 13px/1.4 system-ui, sans-serif;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+#wmd-panneau .wmd-titre {
+  font-weight: bold;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+#wmd-panneau button {
+  display: block;
+  width: 100%;
+  margin: 4px 0;
+  padding: 6px;
+  background: #2f6f4f;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+#wmd-panneau button:hover { background: #3b8a62; }
+#wmd-panneau #wmd-stop { background: #8a3b3b; }
+#wmd-panneau #wmd-reduire {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  margin: 0;
+  padding: 2px;
+  background: #3a3d3a;
+}
+
+/* Panneau réduit : on cache tout sauf le titre et le bouton "-" */
+#wmd-panneau.wmd-reduit > *:not(.wmd-titre):not(#wmd-reduire) { display: none; }
+
+#wmd-statut {
+  margin: 8px 0;
+  padding: 6px;
+  background: #262826;
+  border-radius: 6px;
+}
+
+#wmd-resultats table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+#wmd-resultats th { cursor: pointer; text-align: left; border-bottom: 1px solid #555; }
+#wmd-resultats th:hover { color: #7fd1a4; }
+#wmd-resultats td { padding: 2px 4px; border-bottom: 1px solid #333; }
+#wmd-resultats .wmd-paquet { margin: 6px 0; }
+
+/* Une couleur par rareté */
+.wmd-commun      { color: #cfcfcf; }
+.wmd-peu_commun  { color: #8fd18f; }
+.wmd-rare        { color: #6fb3ff; }
+.wmd-super_rare  { color: #c58bff; }
+.wmd-ultra_rare  { color: #ff9f5a; }
+.wmd-legendaire  { color: #ffd84d; font-weight: bold; }
