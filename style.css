@@ -6,7 +6,7 @@
   right: 16px;
   bottom: 16px;
   z-index: 2147483647;          /* passe au-dessus de tout le site */
-  width: 320px;
+  width: 340px;
   max-height: 70vh;
   overflow-y: auto;
   padding: 12px;
@@ -51,6 +51,9 @@
 
 /* Panneau réduit : on cache tout sauf le titre et le bouton "-" */
 #wmd-panneau.wmd-reduit > *:not(.wmd-titre):not(#wmd-reduire) { display: none; }
+
+/* Nouveau en 1.3 : un bouton caché (attribut hidden) reste caché malgré « display: block » plus haut */
+#wmd-panneau [hidden] { display: none !important; }
 
 #wmd-statut {
   margin: 8px 0;
@@ -100,3 +103,21 @@
 
 /* Et dans le tableau des résultats */
 #wmd-resultats tr.wmd-animee td { background: rgba(255, 216, 77, 0.12); }
+
+/* Nouveau en 1.3 : les blocs Statistiques, Historique, Échange et Cartes manquantes */
+#wmd-panneau .wmd-bloc {
+  margin: 8px 0;
+  padding: 6px 8px;
+  background: #232523;
+  border: 1px solid #3a3d3a;
+  border-radius: 6px;
+}
+#wmd-panneau h4 { margin: 6px 0 4px; font-size: 13px; }
+#wmd-panneau p { margin: 4px 0; }
+#wmd-panneau ul { margin: 4px 0; padding-left: 18px; }
+#wmd-panneau .wmd-discret { color: #a9ada9; font-size: 12px; }
+#wmd-panneau table.wmd-simple th { cursor: default; }
+#wmd-panneau table.wmd-simple th:hover { color: inherit; }
+#wmd-panneau tr.wmd-total td { font-weight: bold; border-top: 1px solid #555; }
+#wmd-panneau textarea { width: 100%; box-sizing: border-box; font: 12px/1.4 monospace; }
+#wmd-panneau #wmd-forcer, #wmd-panneau #wmd-csv-manquantes { background: #3a4f6f; }

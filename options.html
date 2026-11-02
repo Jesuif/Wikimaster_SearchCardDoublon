@@ -11,31 +11,56 @@
     section { background: #fff; border: 1px solid #d9dcd9; border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; }
     label { display: block; margin: 8px 0; }
     input[type="text"] { width: 100%; box-sizing: border-box; padding: 6px 8px; font: inherit; margin-top: 4px; }
+    input[type="number"], select { font: inherit; padding: 2px 4px; }
+    input[type="number"] { width: 3.5em; }
     button { padding: 6px 12px; font: inherit; border: none; border-radius: 6px; background: #2f6f4f; color: #fff; cursor: pointer; margin-top: 8px; }
     button:hover { background: #3b8a62; }
+    button.danger { background: #8a3b3b; }
     .discret { color: #5b605b; font-size: 13px; }
+    .retrait { margin-left: 26px; }
     .alerte { background: #fff6dc; border-left: 4px solid #e0a800; padding: 8px 12px; font-size: 13px; }
-    #resultat-test, #etat { font-weight: 600; }
+    #resultat-test, #etat, #etat-pc, #estimation { font-weight: 600; }
+    details { margin-top: 12px; font-size: 14px; }
+    summary { cursor: pointer; font-weight: 600; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    th, td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #e3e5e3; }
   </style>
 </head>
 <body>
 <main>
   <h1>WikiMasters Doublons – réglages</h1>
-  <p class="discret">Extension non officielle, sans lien avec WikiMasters. Les réglages sont enregistrés tout seuls.</p>
+  <p class="discret">Extension non officielle, sans lien avec WikiMasters. Les réglages sont enregistrés tout seuls.
+    Chaque fonction peut être activée ou coupée.</p>
 
   <section>
-    <h2>Cartes animées</h2>
+    <h2>Fonctions de l'extension</h2>
     <label><input type="checkbox" id="surlignerAnimees"> Entourer en doré les cartes animées (image GIF) sur le site</label>
+    <label><input type="checkbox" id="statistiques"> Statistiques par rareté après la lecture de ta collection</label>
+    <label><input type="checkbox" id="historique"> Historique : comparer chaque lecture à la précédente (nouvelles cartes)</label>
+    <label><input type="checkbox" id="manquantes"> Cartes manquantes et pourcentage par rareté (page « Toutes les cartes »)</label>
+    <label><input type="checkbox" id="echanges"> Aide aux échanges : copie pour Discord et comparaison avec un ami</label>
   </section>
 
   <section>
-    <h2>Notification quand tes 10 paquets sont prêts</h2>
+    <h2>Paquets</h2>
     <p>L'extension calcule l'heure à laquelle ton stock sera plein chaque fois que tu passes sur la page
       <b>Paquets</b> du site. Si tu ouvres des paquets ailleurs (sur ton téléphone par exemple), repasse sur cette page
       depuis ton PC pour que l'heure soit recalculée.</p>
     <p>Stock plein prévu à : <span id="etat">inconnu</span></p>
+    <p>En ce moment : <span id="estimation">inconnu</span></p>
+    <label><input type="checkbox" id="badge"> Afficher le nombre de paquets estimé sur l'icône de l'extension</label>
+    <label>Un nouveau paquet toutes les
+      <select id="minutesParPaquet">
+        <option value="10">10 minutes (compte normal)</option>
+        <option value="3">3 minutes (WikiMasters PRO)</option>
+      </select>
+    </label>
+  </section>
 
+  <section>
+    <h2>Notifications</h2>
     <label><input type="checkbox" id="notifPC"> Sur ce PC (le navigateur doit être ouvert)</label>
+    <p class="discret">Prochaine notification sur ce PC : <span id="etat-pc">aucune</span></p>
 
     <label><input type="checkbox" id="notifTel"> Sur mon téléphone, avec l'application gratuite <b>ntfy</b></label>
     <div id="bloc-telephone">
@@ -50,13 +75,48 @@
       </ol>
       <p class="alerte">Le nom du canal sert de mot de passe : toute personne qui le connaît peut lire tes notifications.
         Choisis un nom difficile à deviner et ne le partage pas. L'extension envoie au service ntfy.sh seulement
-        l'heure à laquelle ton stock sera plein et le texte de la notification.</p>
+        les heures prévues de tes notifications et leur texte.</p>
     </div>
+
+    <p>Tu seras prévenu quand ton stock sera plein. En plus :</p>
+    <label><input type="checkbox" id="alerteAvant"> Prévenir aussi avant, quand j'ai
+      <input type="number" id="alerteA" min="1" max="9" step="1"> paquets sur 10</label>
 
     <button id="tester">Envoyer une notification de test</button>
     <p id="resultat-test"></p>
+
+    <details>
+      <summary>Tu ne vois pas la notification sur le PC ?</summary>
+      <ol>
+        <li>Vérifie que la case <b>« Sur ce PC »</b> est cochée : sinon, seul le téléphone est prévenu.</li>
+        <li>Windows : <b>Paramètres &gt; Système &gt; Notifications</b>. Les notifications doivent être activées,
+          ainsi que la ligne <b>Google Chrome</b> (ou Firefox).</li>
+        <li>Windows bloque les notifications quand <b>« Ne pas déranger »</b> (Windows 11) ou l'<b>Assistant de
+          concentration</b> (Windows 10) est actif, par exemple pendant un jeu ou une vidéo en plein écran.
+          Elles arrivent alors en silence dans le centre de notifications : appuie sur <b>Windows + N</b> pour le voir.</li>
+        <li>Le navigateur doit être ouvert. Pour que Chrome reste actif quand tu fermes toutes ses fenêtres :
+          <b>Paramètres de Chrome &gt; Système &gt; « Continuer à exécuter les applications en arrière-plan… »</b>.</li>
+      </ol>
+    </details>
+  </section>
+
+  <section>
+    <h2>Ce que l'extension garde en mémoire</h2>
+    <p class="discret">Tout reste dans ton navigateur : rien n'est envoyé à l'auteur ni à WikiMasters.</p>
+    <p>Dernière lecture complète de ta collection : <span id="memoire-collection">aucune</span></p>
+    <p>Totaux du jeu (page « Toutes les cartes ») : <span id="memoire-catalogue">jamais lus</span></p>
+    <div id="bloc-historique">
+      <h2>Historique de tes lectures</h2>
+      <p id="historique-vide" class="discret">Aucune lecture pour l'instant.</p>
+      <table id="tableau-historique" hidden>
+        <thead><tr><th>Date</th><th>Exemplaires</th><th>Différentes</th><th>En double</th><th>Animées</th><th>Nouvelles</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <button id="effacer" class="danger">Effacer l'historique et la dernière lecture</button>
   </section>
 </main>
+<script src="commun.js"></script>
 <script src="options.js"></script>
 </body>
 </html>
