@@ -1,3 +1,5 @@
+@charset "UTF-8";
+
 /* Le panneau flottant, en bas à droite de l'écran */
 #wmd-panneau {
   position: fixed;
@@ -70,3 +72,31 @@
 .wmd-super_rare  { color: #c58bff; }
 .wmd-ultra_rare  { color: #ff9f5a; }
 .wmd-legendaire  { color: #ffd84d; font-weight: bold; }
+
+/* Nouveau en 1.1 : le bouton des réglages */
+#wmd-panneau #wmd-reglages { background: #3a4f6f; }
+#wmd-panneau #wmd-reglages:hover { background: #4a6490; }
+
+/* Nouveau en 1.1 : les cartes animées, entourées en doré sur le site */
+.wmd-carte-animee {
+  outline: 3px solid #ffd84d !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 16px 4px rgba(255, 216, 77, 0.7) !important;
+}
+.wmd-carte-animee::after {
+  content: "✨ animée";
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #ffd84d;
+  color: #1b1d1b;
+  font: bold 11px/1.6 system-ui, sans-serif;
+  pointer-events: none;      /* le badge ne bloque pas les clics sur la carte */
+}
+
+/* Et dans le tableau des résultats */
+#wmd-resultats tr.wmd-animee td { background: rgba(255, 216, 77, 0.12); }

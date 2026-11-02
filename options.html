@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Réglages – WikiMasters Doublons</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; background: #f4f5f4; color: #1b1d1b; margin: 0; }
+    main { max-width: 640px; margin: 32px auto; padding: 0 16px; }
+    h1 { font-size: 22px; }
+    h2 { font-size: 17px; margin-top: 0; }
+    section { background: #fff; border: 1px solid #d9dcd9; border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; }
+    label { display: block; margin: 8px 0; }
+    input[type="text"] { width: 100%; box-sizing: border-box; padding: 6px 8px; font: inherit; margin-top: 4px; }
+    button { padding: 6px 12px; font: inherit; border: none; border-radius: 6px; background: #2f6f4f; color: #fff; cursor: pointer; margin-top: 8px; }
+    button:hover { background: #3b8a62; }
+    .discret { color: #5b605b; font-size: 13px; }
+    .alerte { background: #fff6dc; border-left: 4px solid #e0a800; padding: 8px 12px; font-size: 13px; }
+    #resultat-test, #etat { font-weight: 600; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>WikiMasters Doublons – réglages</h1>
+  <p class="discret">Extension non officielle, sans lien avec WikiMasters. Les réglages sont enregistrés tout seuls.</p>
+
+  <section>
+    <h2>Cartes animées</h2>
+    <label><input type="checkbox" id="surlignerAnimees"> Entourer en doré les cartes animées (image GIF) sur le site</label>
+  </section>
+
+  <section>
+    <h2>Notification quand tes 10 paquets sont prêts</h2>
+    <p>L'extension calcule l'heure à laquelle ton stock sera plein chaque fois que tu passes sur la page
+      <b>Paquets</b> du site. Si tu ouvres des paquets ailleurs (sur ton téléphone par exemple), repasse sur cette page
+      depuis ton PC pour que l'heure soit recalculée.</p>
+    <p>Stock plein prévu à : <span id="etat">inconnu</span></p>
+
+    <label><input type="checkbox" id="notifPC"> Sur ce PC (le navigateur doit être ouvert)</label>
+
+    <label><input type="checkbox" id="notifTel"> Sur mon téléphone, avec l'application gratuite <b>ntfy</b></label>
+    <div id="bloc-telephone">
+      <label>Nom de ton canal ntfy :
+        <input type="text" id="canalNtfy" maxlength="64" placeholder="par exemple wikimasters-k3x9q2pz7d" autocomplete="off" spellcheck="false">
+      </label>
+      <button id="generer">Générer un nom difficile à deviner</button>
+      <ol class="discret">
+        <li>Installe l'application <b>ntfy</b> sur ton téléphone (Google Play, F-Droid ou App Store).</li>
+        <li>Dans l'application, touche <b>+</b> et abonne-toi au même nom de canal, sur le serveur ntfy.sh.</li>
+        <li>Clique sur « Envoyer une notification de test » ci-dessous.</li>
+      </ol>
+      <p class="alerte">Le nom du canal sert de mot de passe : toute personne qui le connaît peut lire tes notifications.
+        Choisis un nom difficile à deviner et ne le partage pas. L'extension envoie au service ntfy.sh seulement
+        l'heure à laquelle ton stock sera plein et le texte de la notification.</p>
+    </div>
+
+    <button id="tester">Envoyer une notification de test</button>
+    <p id="resultat-test"></p>
+  </section>
+</main>
+<script src="options.js"></script>
+</body>
+</html>

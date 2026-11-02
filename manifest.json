@@ -1,8 +1,12 @@
 {
   "manifest_version": 3,
   "name": "WikiMasters Doublons",
-  "version": "1.0",
-  "description": "Lit toute ma collection WikiMasters et trouve mes doublons.",
+  "version": "1.1",
+  "description": "Trouve mes doublons et mes cartes animées sur WikiMasters, et me prévient quand mes 10 paquets sont prêts.",
+  "icons": { "128": "icone-128.png" },
+  "permissions": ["storage", "alarms", "notifications"],
+  "background": { "service_worker": "background.js" },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
   "content_scripts": [
     {
       "matches": [

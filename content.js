@@ -1,7 +1,12 @@
 // =====================================================================
-//  WikiMasters Doublons - content.js
-//  Chrome injecte ce script dans chaque page de wiki-masters.com.
+//  WikiMasters Doublons 1.1 - content.js
+//  Le navigateur injecte ce script dans chaque page de wiki-masters.com.
+//  Nouveau en 1.1 : cartes animées mises en valeur, et surveillance du
+//  stock de paquets pour les notifications (voir background.js).
 // =====================================================================
+
+// Chrome appelle ses outils « chrome », Firefox les appelle « browser » : on prend celui qui existe.
+const api = globalThis.browser ?? globalThis.chrome;
 
 
 // ---------------------------------------------------------------------
@@ -15,9 +20,15 @@ const CONFIG = {
   // (chaque exemplaire est une carte à part). On garde le motif au cas où.
   regexQuantite: /^[x×]\s?(\d+)$/i,
 
+  // Une carte « animée » a une image GIF (son adresse se termine par .gif).
+  regexImageAnimee: /\.gif$/i,
+
   // La collection est découpée en pages de 50 cartes : textes des boutons de pagination.
   texteBoutonPageSuivante: "Suivant",
   texteBoutonPagePrecedente: "Précédent",
+
+  // Un nouveau paquet arrive toutes les 10 minutes (3 minutes avec WikiMasters PRO).
+  minutesParPaquet: 10,
 
   pauseMs: 2000,        // pause entre deux pages (2000 ms = 2 secondes)
   attenteMaxMs: 5000    // temps maximum pour attendre qu'une page se charge
@@ -73,24 +84,6 @@ function trouverBoutonParTexte(texte) {
   return null;
 }
 
-// Comme trouverBoutonParTexte, mais attend que le bouton apparaisse (au maximum CONFIG.attenteMaxMs).
-async function attendreBouton(texte) {
-  if (!texte) return null;
-  const debut = Date.now();
-  while (Date.now() - debut < CONFIG.attenteMaxMs) {
-    const bouton = trouverBoutonParTexte(texte);
-    if (bouton) return bouton;
-    await pause(250);
-  }
-  return null;
-}
-
-// Rend un texte sans danger avant de l'insérer dans du HTML.
-function echapper(texte) {
-  const remplacements = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-  return String(texte).replace(/[&<>"']/g, caractere => remplacements[caractere]);
-}
-
 function lettreRarete(rarete) {
   return RARETES[rarete] ? RARETES[rarete].lettre : "?";
 }
@@ -107,26 +100,42 @@ function ordreRarete(rarete) {
 function creerPanneau() {
   if (document.getElementById("wmd-panneau")) return; // il existe déjà
 
+  // On construit le panneau élément par élément (sans innerHTML, comme le demande Mozilla).
   const panneau = document.createElement("div");
   panneau.id = "wmd-panneau";
-  panneau.innerHTML = `
-    <div class="wmd-titre">WikiMasters Doublons</div>
-    <button id="wmd-reduire" title="Réduire / agrandir">-</button>
-    <button id="wmd-stop">Stop</button>
-    <button id="wmd-doublons">Trouver mes doublons</button>
-    <button id="wmd-csv">Exporter en CSV (Excel)</button>
-    <button id="wmd-json">Exporter en JSON (pour le C#)</button>
-    <div id="wmd-statut">Prêt.</div>
-    <div id="wmd-resultats"></div>
-  `;
-  document.body.appendChild(panneau);
 
-  // On branche chaque bouton sur sa fonction (comme un OnClick dans Unity).
-  document.getElementById("wmd-reduire").addEventListener("click", () => panneau.classList.toggle("wmd-reduit"));
-  document.getElementById("wmd-stop").addEventListener("click", () => arreter());
-  document.getElementById("wmd-doublons").addEventListener("click", () => trouverMesDoublons());
-  document.getElementById("wmd-csv").addEventListener("click", () => exporterCSV());
-  document.getElementById("wmd-json").addEventListener("click", () => exporterJSON());
+  const titre = document.createElement("div");
+  titre.className = "wmd-titre";
+  titre.textContent = "WikiMasters Doublons";
+  panneau.appendChild(titre);
+
+  // Crée un bouton et le branche sur sa fonction (comme un OnClick dans Unity).
+  const ajouterBouton = (id, texte, action) => {
+    const bouton = document.createElement("button");
+    bouton.id = id;
+    bouton.textContent = texte;
+    bouton.addEventListener("click", action);
+    panneau.appendChild(bouton);
+    return bouton;
+  };
+  ajouterBouton("wmd-reduire", "-", () => panneau.classList.toggle("wmd-reduit")).title = "Réduire / agrandir";
+  ajouterBouton("wmd-stop", "Stop", () => arreter());
+  ajouterBouton("wmd-doublons", "Trouver mes doublons", () => trouverMesDoublons());
+  ajouterBouton("wmd-csv", "Exporter en CSV (Excel)", () => exporterCSV());
+  ajouterBouton("wmd-json", "Exporter en JSON (pour le C#)", () => exporterJSON());
+  // Nouveau : ouvre la page des réglages (notifications, cartes animées).
+  ajouterBouton("wmd-reglages", "Réglages et notifications", () => {
+    api.runtime.sendMessage({ type: "ouvrir-reglages" }).catch(() => {});
+  });
+
+  const statut = document.createElement("div");
+  statut.id = "wmd-statut";
+  statut.textContent = "Prêt.";
+  const resultats = document.createElement("div");
+  resultats.id = "wmd-resultats";
+  panneau.append(statut, resultats);
+
+  document.body.appendChild(panneau);
 }
 
 // Écrit un message dans le panneau ET dans la console (F12).
@@ -147,29 +156,30 @@ console.log("[WikiMasters Doublons] Extension chargée !");
 //  PARTIE 4 : LIRE LES CARTES AFFICHÉES À L'ÉCRAN
 // ---------------------------------------------------------------------
 
-// Renvoie la liste des cartes visibles : [{ nom, rarete, quantite }, ...]
-function lireCartesAffichees() {
-  const cartes = [];
+// Renvoie le « cadre » de chaque carte affichée : [{ cadre, imageRarete }, ...]
+function trouverCadresDeCartes() {
+  const resultats = [];
   // Chaque carte du site contient une image de rareté dont l'adresse contient "/rarity/".
-  const imagesRarete = document.querySelectorAll('img[src*="/rarity/"]');
-
-  for (const image of imagesRarete) {
-    if (estDansLePanneau(image)) continue;
-
-    // On remonte les parents jusqu'au "cadre" de la carte :
-    // le premier parent qui contient aussi le nom de la carte.
-    let cadre = image.parentElement;
+  for (const imageRarete of document.querySelectorAll('img[src*="/rarity/"]')) {
+    if (estDansLePanneau(imageRarete)) continue;
+    // On remonte les parents jusqu'au premier qui contient aussi le nom de la carte.
+    let cadre = imageRarete.parentElement;
     while (cadre && !cadre.querySelector(CONFIG.selecteurNomCarte)) {
       cadre = cadre.parentElement;
     }
-    if (!cadre) continue;
+    if (cadre) resultats.push({ cadre: cadre, imageRarete: imageRarete });
+  }
+  return resultats;
+}
 
+// Renvoie la liste des cartes visibles : [{ nom, rarete, quantite, animee }, ...]
+function lireCartesAffichees() {
+  const cartes = [];
+  for (const { cadre, imageRarete } of trouverCadresDeCartes()) {
     const nom = cadre.querySelector(CONFIG.selecteurNomCarte).textContent.trim();
-    const trouve = image.getAttribute("src").match(/rarity\/([a-z_]+)\./);
+    const trouve = imageRarete.getAttribute("src").match(/rarity\/([a-z_]+)\./);
     const rarete = trouve ? trouve[1] : "inconnue";
-    const quantite = lireQuantite(cadre);
-
-    cartes.push({ nom: nom, rarete: rarete, quantite: quantite });
+    cartes.push({ nom: nom, rarete: rarete, quantite: lireQuantite(cadre), animee: estAnimee(cadre) });
   }
   return cartes;
 }
@@ -184,6 +194,46 @@ function lireQuantite(cadre) {
   }
   return 1;
 }
+
+// Nouveau : vrai si l'image de la carte bouge (une image GIF, ou une vidéo).
+function estAnimee(cadre) {
+  if (cadre.querySelector("video")) return true;
+  for (const image of cadre.querySelectorAll("img")) {
+    const adresse = image.currentSrc || image.getAttribute("src") || "";
+    if (adresse.includes("/rarity/")) continue; // l'image de rareté ne compte pas
+    if (CONFIG.regexImageAnimee.test(cheminImage(adresse))) return true;
+  }
+  return false;
+}
+
+// Renvoie le chemin du fichier d'une image, même quand le site passe par son
+// « optimiseur d'images » (une adresse du genre /_next/image?url=/cards/chat.gif).
+function cheminImage(adresse) {
+  try {
+    const url = new URL(adresse, location.href);
+    return url.searchParams.get("url") || url.pathname;
+  } catch (erreur) {
+    return adresse;
+  }
+}
+
+// Nouveau : entoure d'un cadre doré les cartes animées affichées sur la page.
+let surlignerAnimees = true; // réglage modifiable dans la page des réglages
+function surlignerCartesAnimees() {
+  for (const { cadre } of trouverCadresDeCartes()) {
+    cadre.classList.toggle("wmd-carte-animee", surlignerAnimees && estAnimee(cadre));
+  }
+}
+api.storage.local.get("reglages").then(({ reglages }) => {
+  surlignerAnimees = !reglages || reglages.surlignerAnimees !== false;
+});
+api.storage.onChanged.addListener(changements => {
+  if (changements.reglages) {
+    const reglages = changements.reglages.newValue;
+    surlignerAnimees = !reglages || reglages.surlignerAnimees !== false;
+  }
+});
+setInterval(surlignerCartesAnimees, 1500);
 
 
 // ---------------------------------------------------------------------
@@ -203,8 +253,9 @@ function arreter() {
 // ---------------------------------------------------------------------
 
 let derniereCollection = [];  // les cartes lues lors du dernier scan
-let modeTri = "quantite";     // "quantite", "rarete" ou "nom"
+let modeTri = "quantite";     // "quantite", "rarete", "nom" ou "animee"
 let afficherTout = false;     // false = seulement les doublons
+let seulementAnimees = false; // true = seulement les cartes animées
 
 // Lit l'indicateur "Page 3 / 280" de la collection.
 // Renvoie { actuelle: 3, total: 280 }, ou null s'il n'est pas sur la page.
@@ -217,17 +268,17 @@ function lirePagination() {
   return null;
 }
 
-// Le nom de la première carte affichée (sert à savoir quand la nouvelle page est arrivée).
-function premierNomAffiche() {
-  const cartes = lireCartesAffichees();
-  return cartes.length > 0 ? cartes[0].nom : "";
+// Les noms de toutes les cartes affichées, collés ensemble : sert à savoir quand la nouvelle page est arrivée.
+// (Nouveau en 1.1 : avant, on ne comparait que la première carte, ce qui coinçait si deux pages commençaient pareil.)
+function signaturePage() {
+  return lireCartesAffichees().map(carte => carte.nom).join("|");
 }
 
 // Clique sur "Suivant" ou "Précédent", puis attend que la nouvelle page soit affichée :
 // le numéro de page a changé ET les cartes aussi. Renvoie false si ça n'arrive pas à temps.
 async function changerDePage(texteBouton) {
   const avant = lirePagination();
-  const nomAvant = premierNomAffiche();
+  const signatureAvant = signaturePage();
   const bouton = trouverBoutonParTexte(texteBouton);
   if (!avant || !bouton) return false; // pas de pagination, ou bouton grisé
   bouton.click();
@@ -236,8 +287,8 @@ async function changerDePage(texteBouton) {
   while (Date.now() - debut < CONFIG.attenteMaxMs) {
     await pause(250);
     const apres = lirePagination();
-    const nomApres = premierNomAffiche();
-    if (apres && apres.actuelle !== avant.actuelle && nomApres !== "" && nomApres !== nomAvant) {
+    const signatureApres = signaturePage();
+    if (apres && apres.actuelle !== avant.actuelle && signatureApres !== "" && signatureApres !== signatureAvant) {
       return true;
     }
   }
@@ -295,9 +346,11 @@ function regrouperParNom(cartes) {
   const parNom = new Map();
   for (const carte of cartes) {
     if (parNom.has(carte.nom)) {
-      parNom.get(carte.nom).quantite += carte.quantite;
+      const deja = parNom.get(carte.nom);
+      deja.quantite += carte.quantite;
+      deja.animee = deja.animee || carte.animee;
     } else {
-      parNom.set(carte.nom, { nom: carte.nom, rarete: carte.rarete, quantite: carte.quantite });
+      parNom.set(carte.nom, { nom: carte.nom, rarete: carte.rarete, quantite: carte.quantite, animee: carte.animee });
     }
   }
   return Array.from(parNom.values());
@@ -312,6 +365,9 @@ function trierCartes(liste, mode) {
     if (mode === "rarete") {
       return ordreRarete(b.rarete) - ordreRarete(a.rarete) || a.nom.localeCompare(b.nom, "fr");
     }
+    if (mode === "animee") { // les cartes animées d'abord, puis les plus nombreuses
+      return Number(b.animee) - Number(a.animee) || b.quantite - a.quantite || a.nom.localeCompare(b.nom, "fr");
+    }
     // par défaut : la plus grande quantité d'abord, puis la plus rare, puis par nom
     return b.quantite - a.quantite
       || ordreRarete(b.rarete) - ordreRarete(a.rarete)
@@ -319,50 +375,73 @@ function trierCartes(liste, mode) {
   });
 }
 
+// Crée une case à cocher avec son texte ; "quandChange" reçoit true ou false.
+function creerCaseACocher(id, texte, cochee, quandChange) {
+  const etiquette = document.createElement("label");
+  const caseACocher = document.createElement("input");
+  caseACocher.type = "checkbox";
+  caseACocher.id = id;
+  caseACocher.checked = cochee;
+  caseACocher.addEventListener("change", () => quandChange(caseACocher.checked));
+  etiquette.append(caseACocher, " " + texte);
+  return etiquette;
+}
+
 function afficherTableau() {
   const toutes = regrouperParNom(derniereCollection);
   const doublons = toutes.filter(c => c.quantite >= 2);
   const enTrop = doublons.reduce((total, c) => total + (c.quantite - 1), 0);
+  const animees = toutes.filter(c => c.animee);
 
-  const liste = afficherTout ? toutes : doublons;
+  let liste = afficherTout ? toutes : doublons;
+  if (seulementAnimees) liste = liste.filter(c => c.animee);
   trierCartes(liste, modeTri);
 
-  let html = `<p>${toutes.length} cartes différentes, ${doublons.length} en double ou plus,
-    ${enTrop} exemplaire(s) en trop à échanger.</p>
-    <label><input type="checkbox" id="wmd-tout" ${afficherTout ? "checked" : ""}> Afficher toute la collection</label>
-    <table>
-      <thead><tr>
-        <th data-tri="nom">Carte</th>
-        <th data-tri="rarete">Rareté</th>
-        <th data-tri="quantite">Qté</th>
-        <th>En trop</th>
-      </tr></thead>
-      <tbody>`;
-  for (const carte of liste) {
-    html += `<tr class="wmd-${carte.rarete}">
-      <td>${echapper(carte.nom)}</td>
-      <td>${lettreRarete(carte.rarete)}</td>
-      <td>${carte.quantite}</td>
-      <td>${carte.quantite - 1}</td>
-    </tr>`;
-  }
-  html += "</tbody></table>";
-
+  // On construit le résultat élément par élément (sans innerHTML, comme le demande Mozilla).
   const zone = document.getElementById("wmd-resultats");
-  zone.innerHTML = html;
+  zone.replaceChildren(); // vide la zone
 
-  // Cliquer sur un titre de colonne change le tri.
-  for (const titre of zone.querySelectorAll("th[data-tri]")) {
-    titre.addEventListener("click", () => {
-      modeTri = titre.dataset.tri;
-      afficherTableau();
-    });
-  }
-  // La case à cocher affiche tout ou seulement les doublons.
-  document.getElementById("wmd-tout").addEventListener("change", evenement => {
-    afficherTout = evenement.target.checked;
+  const resume = document.createElement("p");
+  resume.textContent = `${toutes.length} cartes différentes, ${doublons.length} en double ou plus, `
+    + `${enTrop} exemplaire(s) en trop à échanger, ${animees.length} carte(s) animée(s).`;
+
+  // Les deux cases à cocher : toute la collection, et seulement les cartes animées.
+  const caseTout = creerCaseACocher("wmd-tout", "Afficher toute la collection", afficherTout, coche => {
+    afficherTout = coche;
     afficherTableau();
   });
+  const caseAnimees = creerCaseACocher("wmd-animees", "Seulement les cartes animées", seulementAnimees, coche => {
+    seulementAnimees = coche;
+    afficherTableau();
+  });
+
+  // Le tableau : cliquer sur un titre de colonne change le tri.
+  const tableau = document.createElement("table");
+  const ligneTitres = tableau.createTHead().insertRow();
+  const colonnes = [["Carte", "nom"], ["Rareté", "rarete"], ["Qté", "quantite"], ["En trop", null], ["Animée", "animee"]];
+  for (const [texte, tri] of colonnes) {
+    const titre = document.createElement("th");
+    titre.textContent = texte;
+    if (tri) {
+      titre.dataset.tri = tri;
+      titre.addEventListener("click", () => {
+        modeTri = tri;
+        afficherTableau();
+      });
+    }
+    ligneTitres.appendChild(titre);
+  }
+  const corps = tableau.createTBody();
+  for (const carte of liste) {
+    const ligne = corps.insertRow();
+    ligne.className = `wmd-${carte.rarete}` + (carte.animee ? " wmd-animee" : "");
+    const valeurs = [carte.nom, lettreRarete(carte.rarete), carte.quantite, carte.quantite - 1, carte.animee ? "✨" : ""];
+    for (const valeur of valeurs) {
+      ligne.insertCell().textContent = valeur;
+    }
+  }
+
+  zone.append(resume, caseTout, document.createElement("br"), caseAnimees, tableau);
 
   afficherStatut(`Collection lue : ${derniereCollection.length} carte(s) au total.`);
 }
@@ -397,12 +476,13 @@ function exporterCSV() {
   const liste = regrouperParNom(derniereCollection);
   trierCartes(liste, modeTri);
   const champ = texte => `"${String(texte).replace(/"/g, '""')}"`;
-  const lignes = ["Carte;Rareté;Quantité;En trop"];
+  const lignes = ["Carte;Rareté;Quantité;En trop;Animée"];
   for (const carte of liste) {
-    lignes.push(`${champ(carte.nom)};${lettreRarete(carte.rarete)};${carte.quantite};${carte.quantite - 1}`);
+    lignes.push(`${champ(carte.nom)};${lettreRarete(carte.rarete)};${carte.quantite};${carte.quantite - 1};${carte.animee ? "oui" : "non"}`);
   }
-  // "﻿" au début permet à Excel d'afficher correctement les accents.
-  telechargerFichier("collection-wikimasters.csv", "﻿" + lignes.join("\r\n"), "text/csv;charset=utf-8");
+  // Un caractère invisible (le n° 0xFEFF) placé au début permet à Excel d'afficher correctement les accents.
+  const marqueExcel = String.fromCharCode(0xFEFF);
+  telechargerFichier("collection-wikimasters.csv", marqueExcel + lignes.join("\r\n"), "text/csv;charset=utf-8");
   afficherStatut("Fichier CSV téléchargé.");
 }
 
@@ -412,3 +492,61 @@ function exporterJSON() {
   telechargerFichier("collection-wikimasters.json", JSON.stringify(liste, null, 2), "application/json");
   afficherStatut("Fichier JSON téléchargé.");
 }
+
+
+// ---------------------------------------------------------------------
+//  PARTIE 8 : SURVEILLER LE STOCK DE PAQUETS (pour les notifications)
+// ---------------------------------------------------------------------
+
+// Lit le stock sur la page Paquets : « 2 / 10 » et « Prochain dans 9:32 ».
+// Renvoie { stock: 2, max: 10, secondes: 572 }, ou null si le stock n'est pas affiché.
+function lireStockPaquets() {
+  let stock = null, max = null, secondes = null;
+  for (const element of document.querySelectorAll("main *")) {
+    if (element.children.length > 3 || estDansLePanneau(element)) continue;
+    const texte = element.textContent.replace(/\s+/g, " ").trim();
+
+    // Le compteur « 2 / 10 », juste à côté du texte « paquets disponibles ».
+    const compteur = texte.match(/^(\d+) ?\/ ?(\d+)$/);
+    if (compteur && stock === null && /paquets? disponibles?/i.test(element.parentElement.textContent)) {
+      stock = parseInt(compteur[1], 10);
+      max = parseInt(compteur[2], 10);
+    }
+
+    // Le minuteur « Prochain dans 9:32 » (ou 1:09:32 s'il y a des heures).
+    const minuteur = texte.match(/^Prochain dans (?:(\d+):)?(\d+):(\d{2})$/i);
+    if (minuteur && secondes === null) {
+      secondes = parseInt(minuteur[1] || "0", 10) * 3600 + parseInt(minuteur[2], 10) * 60 + parseInt(minuteur[3], 10);
+    }
+  }
+  if (stock === null) return null;
+  return { stock: stock, max: max, secondes: secondes };
+}
+
+// Calcule l'heure (en millisecondes) à laquelle le stock sera plein.
+// Renvoie null si le stock est déjà plein, et undefined si on ne peut pas encore le savoir.
+function heureStockPlein(lecture) {
+  if (lecture.stock >= lecture.max) return null;
+  if (lecture.secondes === null) return undefined;
+  const paquetsManquants = lecture.max - lecture.stock;
+  // Le prochain paquet arrive dans "secondes", puis un paquet toutes les 10 minutes.
+  return Date.now() + lecture.secondes * 1000 + (paquetsManquants - 1) * CONFIG.minutesParPaquet * 60 * 1000;
+}
+
+// Toutes les 5 secondes : si l'heure du stock plein a changé, on prévient background.js.
+let dernierPleinA; // undefined = rien envoyé pour l'instant
+function surveillerPaquets() {
+  const lecture = lireStockPaquets();
+  if (!lecture) return; // on n'est pas sur la page Paquets (ou un paquet est en cours d'ouverture)
+  const pleinA = heureStockPlein(lecture);
+  if (pleinA === undefined) return;
+
+  const aChange = dernierPleinA === undefined
+    || (pleinA === null) !== (dernierPleinA === null)
+    || (pleinA !== null && Math.abs(pleinA - dernierPleinA) > 60 * 1000); // plus d'une minute d'écart
+  if (!aChange) return;
+
+  dernierPleinA = pleinA;
+  api.runtime.sendMessage({ type: "etat-paquets", pleinA: pleinA }).catch(() => {});
+}
+setInterval(surveillerPaquets, 5000);

@@ -4,14 +4,15 @@
 
 ---
 
-## Ce que fait l'extension
+## Ce que fait l'extension (version 1.1)
 
-Sur la page **Collection** de [wiki-masters.com](https://www.wiki-masters.com/), l'extension ajoute un panneau qui :
+Sur [wiki-masters.com](https://www.wiki-masters.com/), l'extension ajoute un panneau qui :
 
-- lit les cartes affichées sur chaque page de votre collection ;
-- **clique automatiquement sur le bouton « Suivant »**, environ toutes les 2 secondes, pour parcourir toutes les pages ;
-- compte les cartes qui portent le même nom et affiche vos doublons, triés par quantité, rareté ou nom ;
-- exporte le résultat dans un fichier CSV (Excel) ou JSON, enregistré sur votre ordinateur.
+- sur la page **Collection**, lit les cartes de chaque page et **clique automatiquement sur le bouton « Suivant »**, environ toutes les 2 secondes, pour parcourir toute la collection ;
+- affiche vos doublons, triés par quantité, rareté, nom ou animation ;
+- **met en valeur les cartes animées** (celles dont l'image est un GIF) : un cadre doré sur le site, une colonne « Animée » et un filtre dans le tableau ;
+- exporte le résultat dans un fichier CSV (Excel) ou JSON, enregistré sur votre ordinateur ;
+- **si vous l'activez**, vous prévient quand votre stock de 10 paquets est plein, sur votre ordinateur et/ou sur votre téléphone (avec l'application gratuite ntfy).
 
 Elle **n'ouvre aucun paquet**, n'achète rien, n'échange rien et ne vend rien. Elle ignore volontairement tout bouton payant.
 
@@ -20,8 +21,9 @@ Elle **n'ouvre aucun paquet**, n'achète rien, n'échange rien et ne vend rien. 
 1. **Extension non officielle.** Elle n'est ni créée, ni approuvée, ni soutenue par WikiMasters, par son éditeur Shoobidoo Labs inc. ou par la Wikimedia Foundation.
 2. **Elle peut enfreindre les règles du jeu.** Les [Règles de la communauté WikiMasters](https://www.wiki-masters.com/rules) (section 3, « Pas d'automatisation ni de triche ») interdisent les bots, scripts, macros et outils qui jouent ou interagissent à la place du joueur. Comme cette extension clique sur « Suivant » à votre place, WikiMasters peut la considérer comme une automatisation interdite.
 3. **Les sanctions peuvent être lourdes.** Selon les [Conditions d'utilisation](https://www.wiki-masters.com/terms) (section 6), l'éditeur peut, à sa seule discrétion et sans préavis, avertir, restreindre, suspendre ou supprimer définitivement un compte. Il peut aussi annuler des progrès, objets ou récompenses, sans remboursement.
-4. **Le site peut changer à tout moment.** Une mise à jour de WikiMasters peut rendre l'extension inutilisable ou fausser ses résultats. Les doublons affichés peuvent être incomplets ou inexacts : vérifiez-les avant tout échange ou toute vente.
-5. **Les règles peuvent changer.** Les références ci-dessus correspondent aux versions en ligne au 31 octobre 2026 (règles du 20 juillet 2026, conditions du 23 septembre 2026). Il vous appartient de consulter les versions en vigueur.
+4. **Le site peut changer à tout moment.** Une mise à jour de WikiMasters peut rendre l'extension inutilisable ou fausser ses résultats. Les doublons et cartes animées affichés peuvent être incomplets ou inexacts : vérifiez-les avant tout échange ou toute vente.
+5. **Les notifications ne sont pas garanties.** L'heure du stock plein est une estimation, calculée quand vous passez sur la page Paquets. Elle devient fausse si vous ouvrez des paquets ailleurs (sur un autre appareil) sans repasser sur cette page. La notification sur l'ordinateur demande que le navigateur soit ouvert. Celle sur le téléphone dépend du service tiers ntfy.sh, que l'auteur ne contrôle pas.
+6. **Les règles peuvent changer.** Les références ci-dessus correspondent aux versions en ligne au 2 novembre 2026 (règles du 20 juillet 2026, conditions du 23 septembre 2026). Il vous appartient de consulter les versions en vigueur.
 
 En cas de doute, ne l'utilisez pas, ou demandez d'abord l'autorisation à WikiMasters : support@wiki-masters.com.
 
@@ -31,32 +33,40 @@ En installant, en copiant ou en utilisant cette extension, vous reconnaissez avo
 
 L'extension est fournie **« telle quelle »**, gratuitement, **sans aucune garantie** d'aucune sorte, expresse ou implicite, notamment de fonctionnement, d'exactitude, de compatibilité ou de conformité aux règles d'un site tiers.
 
-Dans toute la mesure permise par la loi applicable, l'auteur ne pourra en aucun cas être tenu responsable d'un dommage direct ou indirect résultant de l'installation, de l'utilisation ou de l'impossibilité d'utiliser l'extension. Cela comprend notamment : l'avertissement, la restriction, la suspension ou le bannissement d'un compte ; la perte de cartes, d'objets virtuels, de monnaie virtuelle, de progrès ou d'achats ; une erreur dans les résultats affichés ou exportés.
+Dans toute la mesure permise par la loi applicable, l'auteur ne pourra en aucun cas être tenu responsable d'un dommage direct ou indirect résultant de l'installation, de l'utilisation ou de l'impossibilité d'utiliser l'extension. Cela comprend notamment : l'avertissement, la restriction, la suspension ou le bannissement d'un compte ; la perte de cartes, de paquets, d'objets virtuels, de monnaie virtuelle, de progrès ou d'achats ; une notification absente, en avance ou en retard ; une erreur dans les résultats affichés ou exportés.
 
-Vous êtes seul responsable du respect des conditions d'utilisation et des règles des sites que vous visitez avec cette extension.
+Vous êtes seul responsable du respect des conditions d'utilisation et des règles des sites que vous visitez avec cette extension, ainsi que des conditions du service ntfy.sh si vous l'utilisez.
 
 ## Confidentialité
 
-- L'extension ne collecte, ne stocke et ne transmet **aucune donnée** : rien n'est envoyé à l'auteur ni à un tiers.
-- Elle ne demande aucune permission spéciale à Chrome et ne s'active que sur wiki-masters.com.
+- Par défaut, l'extension ne transmet **aucune donnée** : rien n'est envoyé à l'auteur ni à un tiers.
+- Elle garde dans votre navigateur vos réglages et l'heure prévue du stock plein.
+- Permissions demandées : **stockage** (les réglages), **alarmes** (déclencher la notification à l'heure prévue), **notifications** (l'afficher). Elle ne s'active que sur wiki-masters.com.
+- **Seulement si vous activez la notification sur le téléphone**, elle envoie au service [ntfy.sh](https://ntfy.sh) : le nom de canal que vous avez choisi, l'heure prévue du stock plein et le texte de la notification. Le nom du canal sert de mot de passe : toute personne qui le connaît peut lire ces notifications. Choisissez un nom difficile à deviner (la page des réglages peut en générer un) et ne le partagez pas.
 - Les fichiers exportés restent sur votre ordinateur.
 
 ## Installation (à vos risques)
 
+Cette version est pour **Google Chrome**. La version pour Mozilla Firefox se trouve dans un autre dépôt.
+
 1. Sur cette page GitHub, cliquez sur le bouton vert **Code**, puis **Download ZIP**.
-2. Décompressez l'archive (clic droit > **Extraire tout**) et rangez le dossier obtenu, `Wikimaster_SearchCardDoublon-main`, à un endroit où il restera (si vous le supprimez, l'extension disparaît).
+2. Décompressez l'archive (clic droit > **Extraire tout**) et rangez le dossier obtenu à un endroit où il restera (si vous le supprimez, l'extension disparaît).
 3. Dans Chrome, ouvrez `chrome://extensions` et activez le **Mode développeur** (en haut à droite).
 4. Cliquez sur **Charger l'extension non empaquetée** et choisissez ce dossier : celui qui contient directement `manifest.json`.
+5. Pour recevoir les notifications sur l'ordinateur, vérifiez que Windows autorise les notifications de Chrome (Paramètres > Système > Notifications).
 
 ## Utilisation
 
-1. Sur WikiMasters, allez sur la page **Collection** : le panneau apparaît en bas à droite.
-2. Cliquez sur **Trouver mes doublons**. Pour une grande collection, la lecture peut durer environ un quart d'heure ; ne changez pas de page pendant ce temps.
-3. Le bouton **Stop** interrompt la lecture. Les filtres du site (rareté, étiquette, recherche) limitent la lecture aux cartes filtrées.
+1. **Doublons et cartes animées** : sur la page **Collection**, cliquez sur **Trouver mes doublons**. Pour une grande collection, la lecture peut durer environ un quart d'heure ; ne changez pas de page pendant ce temps. Le bouton **Stop** interrompt la lecture. Les filtres du site (rareté, étiquette, recherche) limitent la lecture aux cartes filtrées.
+2. **Réglages et notifications** : cliquez sur le bouton du même nom dans le panneau. Cochez « Sur ce PC » et/ou « Sur mon téléphone », puis cliquez sur **Envoyer une notification de test**.
+3. **Pour le téléphone** : installez l'application **ntfy** (Google Play, F-Droid ou App Store), touchez **+** et abonnez-vous au même nom de canal que dans les réglages, sur le serveur ntfy.sh.
+4. Passez sur la page **Paquets** du site après avoir ouvert des paquets : c'est là que l'extension recalcule l'heure du stock plein.
 
 ## Désinstallation
 
 Dans `chrome://extensions`, cliquez sur **Supprimer** sous « WikiMasters Doublons », puis supprimez le dossier.
+
+Pensez aussi à vous désabonner du canal dans l'application ntfy si vous l'utilisiez.
 
 ---
 
