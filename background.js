@@ -1,9 +1,10 @@
 // =====================================================================
-//  WikiMasters Doublons 1.3 - background.js
+//  WikiMasters Doublons 1.9.0 - background.js
 //  Le « script d'arrière-plan » : il tourne même quand aucune page
 //  WikiMasters n'est ouverte, tant que le navigateur est lancé.
 //  Son rôle : estimer ton stock de paquets, l'afficher sur l'icône,
 //  et te prévenir avant et quand il est plein.
+//  Nouveau en 1.8 : te prévenir avant la fin des enchères que tu suis.
 // =====================================================================
 
 // Chrome charge l'arrière-plan d'un seul fichier : on lui demande d'importer commun.js.
@@ -26,6 +27,27 @@ function titrePlein(max) {
 
 function titreAlerte(nombre, max) {
   return `WikiMasters : ${nombre} paquets sur ${max}`;
+}
+
+// Corrigé en 1.4 : trois endroits pouvaient annoncer « stock plein » (l'alarme, le rattrapage
+// au démarrage de Chrome et la page Paquets). Chacun envoyait la notification AVANT de noter
+// « déjà prévenu » : quand deux se déclenchaient presque en même temps, tu recevais deux
+// notifications. Désormais, tout ce qui lit puis modifie le stock passe par unParUn() :
+// une file d'attente qui fait passer les tâches l'une après l'autre, jamais en même temps.
+let fileAttente = Promise.resolve();
+function unParUn(tache) {
+  const resultat = fileAttente.then(tache, tache);
+  fileAttente = resultat.catch(erreur => console.warn("[WikiMasters Doublons]", erreur));
+  return resultat;
+}
+
+// La SEULE fonction qui annonce « stock plein » sur le PC. À appeler depuis unParUn().
+// Elle note « prévenu » AVANT d'envoyer : un deuxième appel ne fait donc plus rien.
+async function prevenirPlein(paquets, titre, message) {
+  if (!paquets || paquets.prevenuPlein) return;
+  await api.storage.local.set({ paquets: { ...paquets, prevenuPlein: true } });
+  const reglages = await lireReglages();
+  if (reglages.notifPC) await notifierPC(titre, message);
 }
 
 function messageAlerte(paquets) {
@@ -78,7 +100,7 @@ async function convertirAncienneVersion() {
 
 api.runtime.onMessage.addListener((message, expediteur, repondre) => {
   if (message.type === "etat-paquets") {
-    nouvelEtatPaquets(message);
+    unParUn(() => nouvelEtatPaquets(message));
   }
   if (message.type === "ouvrir-reglages") {
     ouvrirReglages(expediteur.tab);
@@ -108,6 +130,8 @@ async function nouvelEtatPaquets(message) {
   const ancien = await lirePaquets();
   const max = message.max || 10;
 
+  const reglages = await lireReglages();
+
   if (ancien) {
     const etaitPlein = ancien.pleinA <= maintenant;
     if (message.plein && etaitPlein) return; // toujours plein : rien de neuf
@@ -117,20 +141,30 @@ async function nouvelEtatPaquets(message) {
   if (message.plein) {
     // Le site affiche 10/10 alors que l'alarme n'a pas encore sonné (le site a été un peu
     // plus rapide que notre calcul) : on prévient tout de suite au lieu de se taire.
-    const reglages = await lireReglages();
-    const alarmeImminente = ancien && !ancien.prevenuPlein && ancien.pleinA - maintenant < 2 * UNE_MINUTE;
-    if (alarmeImminente && reglages.notifPC) await notifierPC(titrePlein(max), MESSAGE_PLEIN);
+    const alarmeImminente = ancien && ancien.pleinA - maintenant < 2 * UNE_MINUTE;
+    if (alarmeImminente) await prevenirPlein(ancien, titrePlein(max), MESSAGE_PLEIN);
     // Tu as la page sous les yeux : inutile de te prévenir une deuxième fois.
     await api.storage.local.set({ paquets: { pleinA: maintenant, max: max, prevenuPlein: true } });
   } else {
-    await api.storage.local.set({ paquets: { pleinA: message.pleinA, max: max, prevenuPlein: false } });
+    // Corrigé en 1.4 : l'alarme a pu sonner un peu en avance sur le site (qui affiche encore
+    // 9/10). Si la nouvelle heure est presque la même, tu as déjà été prévenu pour ce
+    // remplissage : on ne te prévient pas une deuxième fois quelques minutes plus tard.
+    const memeRemplissage = ancien && ancien.prevenuPlein
+      && Math.abs(message.pleinA - ancien.pleinA) < reglages.minutesParPaquet * UNE_MINUTE / 2;
+    await api.storage.local.set({ paquets: { pleinA: message.pleinA, max: max, prevenuPlein: Boolean(memeRemplissage) } });
   }
   await programmerTout();
 }
 
 // Quand tu changes un réglage dans la page des réglages, on reprogramme tout.
+// Nouveau en 1.8 : pareil quand une enchère est suivie, oubliée, ou que son heure de fin change.
 api.storage.onChanged.addListener(changements => {
   if (changements.reglages) programmerTout();
+  else if (changements.encheres) {
+    programmerEncheres().catch(erreur => console.warn("[WikiMasters Doublons]", erreur));
+    // Le téléphone : un seul envoi pour plusieurs changements rapprochés.
+    api.alarms.create(ALARME_TELEPHONE, { when: Date.now() + 10 * 1000 });
+  }
 });
 
 
@@ -163,17 +197,32 @@ async function programmerTout() {
 
   // 3) Le nombre sur l'icône.
   await mettreAJourBadge();
+
+  // 4) Nouveau en 1.8 : les alertes des enchères suivies.
+  await programmerEncheres();
 }
 
 // Une alarme sonne.
 api.alarms.onAlarm.addListener(async alarme => {
+  // Nouveau en 1.8 : une alerte d'enchère, ou la vérification régulière des enchères suivies.
+  if (alarme.name.startsWith(PREFIXE_ALARME_ENCHERE)) {
+    await alerteEnchere(alarme.name);
+    return;
+  }
+  if (alarme.name === ALARME_ENCHERES_SYNCHRO) {
+    await nettoyerEncheres();
+    await programmerEncheres();
+    await synchroniserTelephone();
+    return;
+  }
+  if (alarme.name === ALARME_PLEIN) {
+    await unParUn(async () => {
+      const paquets = await lirePaquets();
+      if (paquets) await prevenirPlein(paquets, titrePlein(paquets.max), MESSAGE_PLEIN);
+    });
+  }
   const reglages = await lireReglages();
   const paquets = await lirePaquets();
-
-  if (alarme.name === ALARME_PLEIN && paquets && !paquets.prevenuPlein) {
-    if (reglages.notifPC) await notifierPC(titrePlein(paquets.max), MESSAGE_PLEIN);
-    await api.storage.local.set({ paquets: { ...paquets, prevenuPlein: true } });
-  }
   if (alarme.name === ALARME_ALERTE && paquets && reglages.notifPC && reglages.alerteAvant) {
     await notifierPC(titreAlerte(reglages.alerteA, paquets.max), messageAlerte(paquets));
   }
@@ -185,22 +234,39 @@ api.alarms.onAlarm.addListener(async alarme => {
 
 // Au démarrage du navigateur (ou après une mise à jour de l'extension) : les alarmes
 // ont pu être effacées, on rattrape.
-async function rattraper() {
-  await convertirAncienneVersion();
-  const paquets = await lirePaquets();
-  if (paquets && paquets.pleinA <= Date.now() && !paquets.prevenuPlein) {
-    // Le stock s'est rempli pendant que le navigateur était fermé.
-    const reglages = await lireReglages();
-    if (reglages.notifPC) {
-      await notifierPC("WikiMasters : tes paquets sont sûrement pleins",
+// Corrigé en 1.4 : au démarrage, Chrome fait aussi sonner l'alarme manquée. Avant, elle
+// ET le rattrapage notifiaient (c'était la double notification). Maintenant ils passent
+// par la même file et le second voit que tu as déjà été prévenu.
+function rattraper() {
+  return unParUn(async () => {
+    await convertirAncienneVersion();
+    const paquets = await lirePaquets();
+    if (paquets && paquets.pleinA <= Date.now()) {
+      // Le stock s'est rempli pendant que le navigateur était fermé.
+      await prevenirPlein(paquets, "WikiMasters : tes paquets sont sûrement pleins",
         `Ton stock devait être plein à ${heureLisible(paquets.pleinA)}. Ouvre-les vite !`);
     }
-    await api.storage.local.set({ paquets: { ...paquets, prevenuPlein: true } });
-  }
-  await programmerTout();
+    await programmerTout();
+  });
 }
 api.runtime.onStartup.addListener(rattraper);
 api.runtime.onInstalled.addListener(rattraper);
+
+// Nouveau en 1.6.5 : une seule fois, on oublie les prix relevés pour « Système de Ponzi »
+// (une estimation à 10 000 avait été enregistrée par erreur). Ils seront relus au Marché.
+async function remiseAZeroPonzi() {
+  const { remisePonzi165, marche } = await api.storage.local.get(["remisePonzi165", "marche"]);
+  if (remisePonzi165) return;
+  const simplifier = texte => texte.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  if (marche && marche.annonces) {
+    for (const [cle, annonce] of Object.entries(marche.annonces)) {
+      if (simplifier(annonce.nom || "") === "systeme de ponzi") delete marche.annonces[cle];
+    }
+    await api.storage.local.set({ marche: marche });
+  }
+  await api.storage.local.set({ remisePonzi165: true });
+}
+api.runtime.onInstalled.addListener(remiseAZeroPonzi);
 
 
 // ---------------------------------------------------------------------
@@ -241,8 +307,9 @@ async function mettreAJourBadge() {
 
 // Chaque notification a son propre identifiant (l'heure en millisecondes) : sinon
 // Chrome remplace l'ancienne notification en silence, sans rien afficher (le bug de la 1.1).
-async function notifierPC(titre, message) {
-  const id = PREFIXE_NOTIFICATION + Date.now();
+// 1.8 : "prefixe" permet de reconnaître une alerte d'enchère au moment du clic.
+async function notifierPC(titre, message, prefixe = PREFIXE_NOTIFICATION) {
+  const id = prefixe + Date.now();
   const options = {
     type: "basic",
     iconUrl: api.runtime.getURL("icone-128.png"),
@@ -262,10 +329,12 @@ async function notifierPC(titre, message) {
 }
 
 // Un clic sur une de nos notifications la ferme et ouvre la page Paquets.
+// Nouveau en 1.8 : pour une alerte d'enchère, il ouvre la page de l'enchère.
 api.notifications.onClicked.addListener(id => {
   if (!id.startsWith(PREFIXE_NOTIFICATION)) return;
   api.notifications.clear(id);
-  api.tabs.create({ url: PAGE_PAQUETS });
+  const enchere = id.match(/^wikimasters-enchere-([0-9a-f-]{36})-/i);
+  api.tabs.create({ url: enchere ? adresseEnchere(enchere[1]) : PAGE_PAQUETS });
 });
 
 
@@ -299,20 +368,32 @@ async function envoyerNtfy(adresse, methode, texte) {
 
 // Les messages que ntfy doit livrer plus tard (nouveau en 1.3 : il peut y en avoir deux).
 // Chacun a un identifiant fixe : le renvoyer remplace le message programmé avant.
-function messagesVoulus(reglages, paquets) {
+function messagesPaquets(reglages, paquets) {
   const messages = [{ id: "paquets-pleins", quand: paquets.pleinA, titre: titrePlein(paquets.max),
-    texte: MESSAGE_PLEIN, icone: "package" }];
+    texte: MESSAGE_PLEIN, icone: "package", clic: PAGE_PAQUETS }];
   const alerte = heureAlerte(reglages, paquets);
   if (alerte !== null) {
     messages.push({ id: "paquets-alerte", quand: alerte, titre: titreAlerte(reglages.alerteA, paquets.max),
-      texte: messageAlerte(paquets), icone: "hourglass" });
+      texte: messageAlerte(paquets), icone: "hourglass", clic: PAGE_PAQUETS });
   }
   return messages.filter(message => message.quand > Date.now());
 }
 
+// Nouveau en 1.8 : les alertes d'enchères à livrer sur le téléphone. ntfy.sh ne garde un message
+// programmé que 3 jours au plus : les alertes plus lointaines seront envoyées plus tard
+// (la vérification régulière des enchères repasse toutes les 30 minutes).
+const NTFY_DELAI_MAX = 3 * JOUR - HEURE;
+function messagesEncheres(reglages, encheres, maintenant) {
+  return alertesVoulues(reglages, encheres, maintenant, null)
+    .filter(alerte => alerte.quand - maintenant < NTFY_DELAI_MAX)
+    .map(alerte => ({ id: `enchere-${alerte.id}-${alerte.minutes}`, quand: alerte.quand, titre: titreEnchere(alerte.enchere),
+      texte: texteEnchere(alerte.enchere, alerte.minutes * MINUTE), icone: "hourglass_flowing_sand",
+      clic: adresseEnchere(alerte.id), enchere: true }));
+}
+
 // Programme un message chez ntfy, qui le livrera à l'heure dite, même si ton PC est éteint.
 function programmerNtfy(canal, message) {
-  const parametres = new URLSearchParams({ title: message.titre, tags: message.icone, click: PAGE_PAQUETS });
+  const parametres = new URLSearchParams({ title: message.titre, tags: message.icone, click: message.clic || PAGE_PAQUETS });
   // ntfy refuse un délai de moins de 10 secondes : dans ce cas, on envoie tout de suite.
   if (message.quand - Date.now() > 15 * 1000) {
     parametres.set("delay", String(Math.round(message.quand / 1000)));
@@ -329,25 +410,48 @@ function annulerNtfy(canal, id) {
 async function synchroniserTelephone() {
   const reglages = await lireReglages();
   const paquets = await lirePaquets();
+  const encheres = await lireEncheres();
   const { ntfy: deja = null } = await api.storage.local.get("ntfy");
   const maintenant = Date.now();
   const canal = reglages.canalNtfy;
 
-  const actif = reglages.notifTel && canalValide(canal) && paquets !== null && await accordEnvoiDonnees();
-  const voulus = actif ? messagesVoulus(reglages, paquets) : [];
+  const possible = canalValide(canal) && (reglages.notifTel || reglages.enchereNotifTel) && await accordEnvoiDonnees();
+  const voulus = [];
+  if (possible && reglages.notifTel && paquets !== null) voulus.push(...messagesPaquets(reglages, paquets));
+  // Nouveau en 1.8 : les alertes des enchères suivies.
+  if (possible && reglages.encheres && reglages.enchereNotifTel) voulus.push(...messagesEncheres(reglages, encheres, maintenant));
   const programmes = deja ? deja.messages : {};
+  const memeCanal = Boolean(deja && deja.canal === canal);
+
+  // 0) Nouveau en 1.8 : une alerte d'enchère déjà livrée ne repart pas si l'heure de fin n'a été
+  //    que précisée (2 minutes d'écart au plus) : sinon tu la recevrais deux fois.
+  const aEnvoyer = voulus.filter(message => {
+    const avant = memeCanal ? programmes[message.id] : undefined;
+    return !(message.enchere && avant !== undefined && avant <= maintenant && message.quand - avant <= 2 * UNE_MINUTE);
+  });
 
   // 1) On annule ce qui n'est plus voulu (notification coupée, canal changé, heure dépassée...).
   for (const [id, quand] of Object.entries(programmes)) {
-    const encoreVoulu = deja.canal === canal && voulus.some(message => message.id === id);
+    const encoreVoulu = memeCanal && aEnvoyer.some(message => message.id === id);
     if (quand > maintenant && !encoreVoulu) await annulerNtfy(deja.canal, id);
   }
 
   // 2) On programme ce qui est nouveau ou dont l'heure a changé ; le reste ne bouge pas.
   const nouveaux = {};
-  for (const message of voulus) {
-    const dejaBon = deja && deja.canal === canal && Math.abs((programmes[message.id] ?? 0) - message.quand) < UNE_MINUTE;
+  for (const message of aEnvoyer) {
+    const dejaBon = memeCanal && Math.abs((programmes[message.id] ?? 0) - message.quand) < UNE_MINUTE;
     if (dejaBon || await programmerNtfy(canal, message)) nouveaux[message.id] = message.quand;
+  }
+
+  // 3) Nouveau en 1.8 : on se souvient des alertes d'enchères déjà livrées tant que l'enchère court.
+  if (memeCanal) {
+    for (const [id, quand] of Object.entries(programmes)) {
+      const trouve = id.match(/^enchere-([0-9a-f-]{36})-\d+$/i);
+      const enchere = trouve && encheres[trouve[1].toLowerCase()];
+      if (nouveaux[id] === undefined && quand <= maintenant && enchere && !enchere.terminee && enchere.finMax > maintenant) {
+        nouveaux[id] = quand;
+      }
+    }
   }
   await api.storage.local.set({ ntfy: Object.keys(nouveaux).length ? { canal: canal, messages: nouveaux } : null });
 }
@@ -365,7 +469,8 @@ async function envoyerTest() {
   if (api.notifications.getPermissionLevel) {
     resultat.permission = await api.notifications.getPermissionLevel();
   }
-  if (reglages.notifPC) {
+  // 1.8 : le test vaut aussi pour les alertes d'enchères (cases « Sur ce PC » / « Sur mon téléphone » des enchères).
+  if (reglages.notifPC || (reglages.encheres && reglages.enchereNotifPC)) {
     try {
       await notifierPC("Test WikiMasters Doublons", "Les notifications sur ce PC fonctionnent.");
       resultat.pc = true;
@@ -373,7 +478,7 @@ async function envoyerTest() {
       resultat.pc = false;
     }
   }
-  if (reglages.notifTel) {
+  if (reglages.notifTel || (reglages.encheres && reglages.enchereNotifTel)) {
     if (!canalValide(reglages.canalNtfy) || !(await accordEnvoiDonnees())) {
       resultat.telephone = false;
     } else {
@@ -383,4 +488,145 @@ async function envoyerTest() {
     }
   }
   return resultat;
+}
+
+
+// ---------------------------------------------------------------------
+//  PARTIE 8 : LES ENCHÈRES SUIVIES (nouveau en 1.8)
+//  content.js range dans la mémoire « encheres » les enchères que tu suis et leur heure
+//  de fin (fin = la plus tôt possible, finMax = la plus tard possible). Ici, on programme
+//  une alarme par alerte voulue (par exemple 1 h et 10 min avant la fin), et on prévient.
+//  « encheresEnvoyees » retient les alertes déjà envoyées sur le PC, pour ne jamais les
+//  envoyer deux fois.
+// ---------------------------------------------------------------------
+
+const PREFIXE_ALARME_ENCHERE = "enchere|";            // enchere|<identifiant>|<minutes avant la fin>
+const ALARME_ENCHERES_SYNCHRO = "encheres-synchro";  // vérification régulière (toutes les 30 minutes)
+
+function adresseEnchere(id) {
+  return `https://www.wiki-masters.com/marketplace/${id}`;
+}
+
+async function lireEncheres() {
+  const { encheres } = await api.storage.local.get("encheres");
+  return encheres || {};
+}
+
+function titreEnchere(enchere) {
+  const lettre = enchere.rarete && RARETES[enchere.rarete] ? ` (${lettreRarete(enchere.rarete)})` : "";
+  return `Enchère bientôt finie : ${enchere.nom || "une carte"}${lettre}`;
+}
+
+// « Il reste environ 10 min (fin vers 18:42). Tu mènes (vu à 18:20). Dernière mise vue : 530. »
+// Le statut (« Vous menez » / « Surenchéri ») est celui vu la dernière fois sur le site.
+function texteEnchere(enchere, reste) {
+  const marge = (enchere.finMax || enchere.fin) - enchere.fin;
+  const statut = enchere.statut === "menez" ? "Tu mènes" : enchere.statut === "surencheri" ? "Tu as été surenchéri !" : "";
+  return `Il reste environ ${dureeLisible(Math.max(0, reste))} (fin vers ${heureLisible(enchere.fin)}`
+    + (marge > 2 * MINUTE ? `, à ${dureeLisible(marge)} près` : "") + ")."
+    + (statut ? ` ${statut}${enchere.statutVu ? ` (vu à ${heureLisible(enchere.statutVu)})` : ""}.`.replace("!.", "!") : "")
+    + (enchere.prix ? ` Dernière mise vue : ${nombreLisible(enchere.prix)}.` : "");
+}
+
+// Les alertes encore à venir : [{ id, minutes, quand, enchere }].
+// "envoyees" (ou null) : les alertes déjà envoyées, qui ne repartent que si la fin a reculé de plus de 2 minutes
+// (une enchère prolongée), pas si son heure a seulement été précisée.
+function alertesVoulues(reglages, encheres, maintenant, envoyees) {
+  if (!reglages.encheres) return [];
+  const delais = nettoyerDelais(reglages.enchereDelais);
+  const alertes = [];
+  for (const enchere of Object.values(encheres)) {
+    if (enchere.terminee || !enchere.fin || !(enchere.finMax > maintenant)) continue;
+    for (const minutes of delais) {
+      const quand = enchere.fin - minutes * MINUTE;
+      if (quand <= maintenant) continue;
+      const envoyee = envoyees && envoyees[`${enchere.id}|${minutes}`];
+      if (envoyee && enchere.fin - envoyee.fin <= 2 * MINUTE) continue;
+      alertes.push({ id: enchere.id, minutes: minutes, quand: quand, enchere: enchere });
+    }
+  }
+  return alertes;
+}
+
+// Met les alarmes des enchères en accord avec la mémoire : crée les nouvelles, déplace celles
+// dont l'heure a changé, efface celles qui ne servent plus.
+async function programmerEncheres() {
+  const reglages = await lireReglages();
+  const encheres = await lireEncheres();
+  const { encheresEnvoyees: envoyees = {} } = await api.storage.local.get("encheresEnvoyees");
+  const maintenant = Date.now();
+  const voulues = reglages.enchereNotifPC ? alertesVoulues(reglages, encheres, maintenant, envoyees) : [];
+  const parNom = new Map(voulues.map(alerte => [`${PREFIXE_ALARME_ENCHERE}${alerte.id}|${alerte.minutes}`, alerte.quand]));
+
+  const existantes = await api.alarms.getAll();
+  const heures = new Map(existantes.map(alarme => [alarme.name, alarme.scheduledTime]));
+  for (const alarme of existantes) {
+    if (alarme.name.startsWith(PREFIXE_ALARME_ENCHERE) && !parNom.has(alarme.name)) await api.alarms.clear(alarme.name);
+  }
+  for (const [nom, quand] of parNom) {
+    if (!heures.has(nom) || Math.abs(heures.get(nom) - quand) > SECONDE) await api.alarms.create(nom, { when: quand });
+  }
+  // La vérification régulière tourne tant qu'il y a des enchères en mémoire (téléphone au-delà de
+  // 3 jours, ménage des enchères terminées).
+  if (reglages.encheres && Object.keys(encheres).length > 0) {
+    if (!heures.has(ALARME_ENCHERES_SYNCHRO)) await api.alarms.create(ALARME_ENCHERES_SYNCHRO, { periodInMinutes: 30 });
+  } else {
+    await api.alarms.clear(ALARME_ENCHERES_SYNCHRO);
+  }
+}
+
+// Une alarme d'enchère sonne : on prévient sur le PC (une seule fois par alerte).
+async function alerteEnchere(nomAlarme) {
+  const [, id, minutesTexte] = nomAlarme.split("|");
+  const minutes = parseInt(minutesTexte, 10);
+  await unParUn(async () => {
+    const reglages = await lireReglages();
+    const encheres = await lireEncheres();
+    const enchere = encheres[id];
+    const maintenant = Date.now();
+    if (!reglages.encheres || !reglages.enchereNotifPC || !enchere || enchere.terminee || !enchere.fin
+      || !(enchere.finMax > maintenant)) return;
+    const delais = nettoyerDelais(reglages.enchereDelais);
+    if (!delais.includes(minutes)) return;
+    // L'heure de fin a reculé depuis (enchère prolongée) : il est trop tôt, on reprogramme.
+    if (enchere.fin - minutes * MINUTE > maintenant + MINUTE) {
+      await programmerEncheres();
+      return;
+    }
+    const { encheresEnvoyees: envoyees = {} } = await api.storage.local.get("encheresEnvoyees");
+    const deja = envoyees[`${id}|${minutes}`];
+    if (deja && enchere.fin - deja.fin <= 2 * MINUTE) return;
+    // Si plusieurs alertes sont en retard en même temps (PC sorti de veille), une seule notification
+    // part, avec le vrai temps restant : toutes les alertes déjà passées sont notées comme envoyées.
+    for (const d of delais) {
+      if (enchere.fin - d * MINUTE <= maintenant + MINUTE) envoyees[`${id}|${d}`] = { fin: enchere.fin, quand: maintenant };
+    }
+    await api.storage.local.set({ encheresEnvoyees: envoyees });
+    await notifierPC(titreEnchere(enchere), texteEnchere(enchere, enchere.fin - maintenant),
+      `${PREFIXE_NOTIFICATION}enchere-${id}-`);
+  });
+}
+
+// Le ménage : une enchère terminée depuis plus d'un jour est oubliée, comme une enchère dont
+// on ne connaît pas la fin et qu'on n'a pas revue depuis 14 jours.
+async function nettoyerEncheres() {
+  const { encheres = {}, encheresEnvoyees = {}, encheresIgnorees = {} } =
+    await api.storage.local.get(["encheres", "encheresEnvoyees", "encheresIgnorees"]);
+  const maintenant = Date.now();
+  let change = false;
+  for (const [id, enchere] of Object.entries(encheres)) {
+    const finie = enchere.terminee || (enchere.finMax && enchere.finMax < maintenant);
+    const depuis = maintenant - Math.max(enchere.finMax || 0, enchere.vu || 0, enchere.suivieLe || 0);
+    if ((finie && depuis > JOUR) || (!enchere.fin && depuis > 14 * JOUR)) {
+      delete encheres[id];
+      change = true;
+    }
+  }
+  const envoyees = Object.fromEntries(Object.entries(encheresEnvoyees).filter(([cle]) => encheres[cle.split("|")[0]]));
+  const ignorees = Object.fromEntries(Object.entries(encheresIgnorees).filter(([, date]) => maintenant - date < 30 * JOUR));
+  const aEcrire = {};
+  if (change) aEcrire.encheres = encheres;
+  if (Object.keys(envoyees).length !== Object.keys(encheresEnvoyees).length) aEcrire.encheresEnvoyees = envoyees;
+  if (Object.keys(ignorees).length !== Object.keys(encheresIgnorees).length) aEcrire.encheresIgnorees = ignorees;
+  if (Object.keys(aEcrire).length) await api.storage.local.set(aEcrire);
 }

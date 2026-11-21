@@ -50,7 +50,8 @@
 }
 
 /* Panneau réduit : on cache tout sauf le titre et le bouton "-" */
-#wmd-panneau.wmd-reduit > *:not(.wmd-titre):not(#wmd-reduire) { display: none; }
+/* 1.9 : les étiquettes de la carte ouverte (#wmd-suggestions) restent visibles même panneau réduit */
+#wmd-panneau.wmd-reduit > *:not(.wmd-titre):not(#wmd-reduire):not(#wmd-suggestions) { display: none; }
 
 /* Nouveau en 1.3 : un bouton caché (attribut hidden) reste caché malgré « display: block » plus haut */
 #wmd-panneau [hidden] { display: none !important; }
@@ -121,3 +122,200 @@
 #wmd-panneau tr.wmd-total td { font-weight: bold; border-top: 1px solid #555; }
 #wmd-panneau textarea { width: 100%; box-sizing: border-box; font: 12px/1.4 monospace; }
 #wmd-panneau #wmd-forcer, #wmd-panneau #wmd-csv-manquantes { background: #3a4f6f; }
+
+/* Nouveau en 1.4.2 : le prix estimé dans la fiche d'une carte, au-dessus de « Mettre aux enchères » */
+.wmd-prix-fiche {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(127, 209, 164, 0.4);
+  border-radius: 8px;
+  background: rgba(47, 111, 79, 0.18);
+  color: #f2f2f2;
+  font: 13px/1.4 system-ui, sans-serif;
+}
+.wmd-prix-fiche .wmd-discret { opacity: 0.7; font-size: 11px; margin-top: 2px; }
+
+/* Nouveau en 1.4.4 : le bouton « Chercher au marché » dans la fiche d'une carte */
+.wmd-prix-fiche .wmd-chercher-marche {
+  float: right;
+  margin: -2px 0 4px 8px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: 6px;
+  background: #2f6f4f;
+  color: #fff;
+  font: 12px/1.4 system-ui, sans-serif;
+  cursor: pointer;
+}
+.wmd-prix-fiche .wmd-chercher-marche:hover { background: #3b8a62; }
+.wmd-prix-fiche::after { content: ""; display: block; clear: both; }
+/* Nouveau en 1.6.4 : l'encart d'estimation sur la page d'une enchère */
+.wmd-prix-enchere { margin: 10px 0; }
+
+/* Nouveau en 1.4.6 : le titre (et son bouton « - ») reste toujours visible en haut du panneau */
+#wmd-panneau .wmd-titre {
+  position: sticky;
+  top: -12px;                 /* le panneau a 12 px de marge intérieure : on remonte jusqu'au bord */
+  z-index: 5;
+  margin: -12px -12px 8px;
+  padding: 12px 48px 8px 12px;
+  background: #1b1d1b;
+  border-bottom: 1px solid #3a3d3a;
+}
+#wmd-panneau .wmd-titre #wmd-reduire { top: 8px; right: 12px; }
+#wmd-panneau.wmd-reduit .wmd-titre { margin-bottom: -12px; border-bottom: none; }
+
+/* Nouveau en 1.5 : mes souhaits chez mes amis */
+#wmd-panneau #wmd-souhaits { background: #5a3f7a; }
+#wmd-panneau #wmd-souhaits:hover { background: #6e4f94; }
+/* Nouveau en 1.7.4 : la case « Afficher les prix min / max du Marché » */
+#wmd-panneau label.wmd-case { display: block; margin: 6px 0; font-size: 12px; cursor: pointer; }
+#wmd-panneau label.wmd-case[hidden] { display: none; }
+#wmd-panneau button.wmd-mini { width: auto; margin: 0; padding: 2px 8px; font-size: 11px; }
+.wmd-carte-visee {
+  outline: 3px solid #3bd38a !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 16px 4px rgba(59, 211, 138, 0.6) !important;
+}
+
+/* Nouveau en 1.5.1 : le badge « $ » sur les cartes dont l'extension connaît le prix,
+   à la manière du badge « ✨ animée » (qui, lui, est en haut au centre) */
+.wmd-carte-prix::before {
+  content: "$" attr(data-wmd-badge); /* 1.6.6 : avec la valeur estimée, par exemple « $530 » */
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 40;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: #3bd38a;
+  color: #10261b;
+  font: bold 13px/20px system-ui, sans-serif;
+  text-align: center;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;      /* le badge ne bloque pas les clics sur la carte */
+}
+
+/* Nouveau en 1.7.3 : le badge des prix trouvés au Marché (« -120 / +530 »), sous le badge « $ » */
+.wmd-badge-marche {
+  position: absolute;
+  top: 30px;
+  right: 6px;
+  z-index: 40;
+  height: 20px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: #4aa3ff;
+  color: #0b1a2b;
+  font: bold 12px/20px system-ui, sans-serif;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.wmd-badge-marche::before { content: attr(data-texte); }
+.wmd-badge-marche-seul { top: 6px; } /* pas de prix moyen : il prend la place du « $ » */
+
+/* Nouveau en 1.6.1 : les enchères du Marché sous l'estimation de l'extension */
+.wmd-bonne-affaire {
+  position: relative;
+  outline: 3px solid var(--wmd-couleur-affaire, #e53935) !important;
+  outline-offset: 2px;
+  border-radius: 16px;
+  box-shadow: 0 0 14px 3px var(--wmd-couleur-affaire, #e53935) !important;
+}
+.wmd-bonne-affaire::after {
+  content: attr(data-wmd-affaire);
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--wmd-couleur-affaire, #e53935);
+  color: #1b1d1b;
+  font: bold 11px/1.6 system-ui, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Nouveau en 1.7.5 : les noms de cartes cliquables dans « Estimer la valeur de mes cartes » */
+#wmd-panneau a.wmd-lien-carte { color: inherit; text-decoration: underline; cursor: pointer; }
+
+/* Nouveau en 1.8 : le bouton « Reprendre la lecture » et les cartes animées du jeu */
+#wmd-panneau #wmd-reprendre { background: #b06a12; }
+#wmd-panneau #wmd-reprendre:hover { background: #c97d1c; }
+#wmd-panneau #wmd-animees-jeu, #wmd-panneau #wmd-animees-revoir { background: #7a6312; }
+#wmd-panneau #wmd-animees-jeu:hover, #wmd-panneau #wmd-animees-revoir:hover { background: #937818; }
+#wmd-panneau #wmd-csv-animees { background: #3a4f6f; }
+
+/* Nouveau en 1.8 : les enchères suivies */
+#wmd-panneau #wmd-encheres { background: #2d5d7b; }
+#wmd-panneau #wmd-encheres:hover { background: #3a7399; }
+.wmd-suivi-enchere { margin: 10px 0; }
+.wmd-suivi-enchere a.wmd-lien-carte { color: inherit; text-decoration: underline; cursor: pointer; font-size: 12px; }
+.wmd-saisie-fin { margin-top: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wmd-saisie-fin input {
+  flex: 1 1 160px;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid #555;
+  border-radius: 6px;
+  background: #1b1d1b;
+  color: #f2f2f2;
+  font: 12px/1.4 system-ui, sans-serif;
+}
+.wmd-saisie-fin .wmd-chercher-marche { float: none; margin: 0; }
+/* Sur la liste du Marché : une cloche sur les enchères suivies (en bas à gauche de l'annonce) */
+.wmd-enchere-suivie { position: relative; }
+.wmd-enchere-suivie::before {
+  content: attr(data-wmd-suivie);
+  position: absolute;
+  bottom: -10px;               /* en bas : le site met déjà « Vous menez » / « Surenchéri » en haut */
+  left: 8px;
+  z-index: 41;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #4aa3ff;
+  color: #0b1a2b;
+  font: bold 11px/1.6 system-ui, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 1.9 (repris de la branche 1.4) : l'étiquette suggérée, au-dessus du texte de chaque carte de la Collection.
+   Un petit élément à lui (le « ::before » de la carte sert déjà au badge « $ »). */
+.wmd-badge-etiquettes {
+  position: absolute;
+  top: calc(45% - 22px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 41;
+  max-width: 92%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #2f6f4f;        /* vert : déjà posée */
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;       /* le badge ne bloque pas les clics sur la carte */
+}
+.wmd-badge-etiquettes.wmd-a-etiqueter { background: #3a4f6f; } /* bleu : étiquette à poser */
+.wmd-badge-etiquettes::before {
+  content: attr(data-texte);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 8px;
+  font: bold 11px/1.6 system-ui, sans-serif;
+  color: #fff;
+}
+
+/* Les boutons d'étiquettes de la carte ouverte, dans le panneau */
+#wmd-panneau button.wmd-suggestion { background: #3a4f6f; text-align: left; }
+#wmd-panneau button.wmd-suggestion:disabled { background: #263326; color: #9fd0a8; cursor: default; }
+#wmd-panneau.wmd-reduit #wmd-suggestions.wmd-bloc { margin: 8px 0 0; }

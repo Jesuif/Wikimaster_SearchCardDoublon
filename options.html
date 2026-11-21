@@ -24,6 +24,19 @@
     summary { cursor: pointer; font-weight: 600; }
     table { border-collapse: collapse; width: 100%; font-size: 14px; }
     th, td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #e3e5e3; }
+    /* Nouveau en 1.8 : la liste des alertes d'enchères */
+    .ligne-delai { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+    .ligne-delai input[type="number"] { width: 4.5em; }
+    .ligne-delai button, button.petit { margin-top: 0; padding: 3px 10px; font-size: 13px; background: #6b6f6b; }
+    .ligne-delai button:hover, button.petit:hover { background: #858a85; }
+    #bloc-encheres h2 { margin-top: 18px; }
+    /* 1.9 (repris de la branche 1.4) : les étiquettes suggérées */
+    fieldset.etiquette { border: 1px solid #d9dcd9; border-radius: 8px; margin: 10px 0; padding: 6px 12px 10px; }
+    fieldset.etiquette legend { font-weight: 600; }
+    fieldset.etiquette input[type="text"].nom { width: 14em; margin: 0 0 0 4px; }
+    fieldset.etiquette textarea { width: 100%; box-sizing: border-box; font: 13px/1.4 system-ui, sans-serif; margin-top: 4px; }
+    fieldset.etiquette.coupee { opacity: 0.55; }
+    button.secondaire { background: #5b605b; }
   </style>
 </head>
 <body>
@@ -35,10 +48,47 @@
   <section>
     <h2>Fonctions de l'extension</h2>
     <label><input type="checkbox" id="surlignerAnimees"> Entourer en doré les cartes animées (image GIF) sur le site</label>
+    <label><input type="checkbox" id="etiquettes"> Étiquettes suggérées : un badge sur chaque carte de ta Collection, et le champ « Ajouter une étiquette » pré-rempli quand tu ouvres une carte</label>
     <label><input type="checkbox" id="statistiques"> Statistiques par rareté après la lecture de ta collection</label>
     <label><input type="checkbox" id="historique"> Historique : comparer chaque lecture à la précédente (nouvelles cartes)</label>
     <label><input type="checkbox" id="manquantes"> Cartes manquantes et pourcentage par rareté (page « Toutes les cartes »)</label>
     <label><input type="checkbox" id="echanges"> Aide aux échanges : copie pour Discord et comparaison avec un ami</label>
+    <label><input type="checkbox" id="marche"> Marché : relever les « mises actuelles » (jamais les mises de départ) pour estimer la valeur de mes cartes</label>
+    <label><input type="checkbox" id="animeesJeu"> Bouton « Trouver les cartes animées du jeu » sur la page « Toutes les cartes »</label>
+  </section>
+
+  <section id="section-etiquettes">
+    <h2>Étiquettes suggérées</h2>
+    <p>L'extension lit la courte description de chaque carte (« actrice française », « espèce de plantes »…)
+      et y cherche les mots-clés ci-dessous. Elle ne pose jamais d'étiquette elle-même : quand tu ouvres une carte,
+      elle écrit l'étiquette dans le champ du site, et c'est toi qui appuies sur Entrée.</p>
+    <p>Tes étiquettes trouvées sur le site : <span id="etiquettes-site">aucune pour l'instant</span></p>
+    <p class="discret">Si tu as déjà une étiquette équivalente (par exemple « Écrans » pour « film &amp; série »), c'est elle
+      qui est proposée. Les autres étiquettes du site sont ignorées. Pour que la liste soit complète,
+      ouvre une fois le menu « Toutes les étiquettes » de ta page Collection.</p>
+    <div id="liste-etiquettes"></div>
+    <button id="ajouter-etiquette" type="button">Ajouter une étiquette</button>
+    <button id="etiquettes-defaut" type="button" class="secondaire">Remettre les étiquettes de départ</button>
+  </section>
+
+  <section>
+    <h2>Lecture des pages (doublons, cartes manquantes, cartes animées)</h2>
+    <label>Si une page tarde à répondre, réessayer pendant
+      <select id="patienceMinutes">
+        <option value="1">1 minute</option>
+        <option value="3">3 minutes</option>
+        <option value="10">10 minutes</option>
+        <option value="30">30 minutes</option>
+      </select>
+      avant d'abandonner</label>
+    <p class="discret">Quand une page tarde, l'extension attend plus longtemps à chaque essai (5 s, 10 s, 20 s, puis 30 s),
+      reclique sur « Suivant » si le site n'a pas pris le clic, et clique sur « Réessayer » si le site en affiche un.
+      Si la page ne vient toujours pas, rien n'est perdu : le bouton <b>« Reprendre la lecture »</b> du panneau
+      repart de la page où la lecture s'est arrêtée.</p>
+    <label>Sur « Toutes les cartes », refuser une liste de plus de
+      <input type="number" id="pagesMax" min="10" max="20000" step="10" style="width: 5em"> pages</label>
+    <p class="discret">Une page compte 50 cartes et demande environ 3 secondes : 300 pages ≈ 15 minutes, 3 000 pages ≈ 2 h 30.
+      Choisis plutôt une rareté avec les filtres du site (L, UR, SR…) : le jeu compte des millions de cartes communes.</p>
   </section>
 
   <section>
@@ -64,6 +114,7 @@
 
     <label><input type="checkbox" id="notifTel"> Sur mon téléphone, avec l'application gratuite <b>ntfy</b></label>
     <div id="bloc-telephone">
+      <p class="discret" id="note-canal-encheres" hidden>Ce canal sert aussi aux alertes d'enchères (case « Sur mon téléphone » de la partie Enchères).</p>
       <label>Nom de ton canal ntfy :
         <input type="text" id="canalNtfy" maxlength="64" placeholder="par exemple wikimasters-k3x9q2pz7d" autocomplete="off" spellcheck="false">
       </label>
@@ -101,10 +152,43 @@
   </section>
 
   <section>
+    <h2>Enchères : être prévenu avant la fin</h2>
+    <label><input type="checkbox" id="encheres"> Me prévenir avant la fin des enchères que je suis</label>
+    <div id="bloc-encheres">
+      <label><input type="checkbox" id="enchereAuto"> Suivre automatiquement les enchères sur lesquelles j'ai misé
+        (quand je clique sur « Miser », ou quand j'ouvre l'onglet « Mes enchères » du Marché)</label>
+      <p class="discret">Tu peux aussi suivre une enchère à la main : sur sa page, bouton « 🔔 Me prévenir avant la fin ».
+        L'extension ne mise jamais à ta place : elle regarde seulement tes clics et l'heure de fin.</p>
+
+      <p><b>Me prévenir :</b></p>
+      <div id="liste-delais"></div>
+      <button id="ajouter-delai" type="button">+ Ajouter une alerte</button>
+      <p class="discret" id="resume-delais"></p>
+
+      <label><input type="checkbox" id="enchereNotifPC"> Sur ce PC (le navigateur doit être ouvert)</label>
+      <label><input type="checkbox" id="enchereNotifTel"> Sur mon téléphone, avec <b>ntfy</b> (même canal que pour les paquets,
+        voir la partie Notifications ; marche même si ton PC est éteint)</label>
+      <p class="alerte">L'heure de fin est lue sur la page de l'enchère (et sur la liste du Marché) à chacun de tes passages.
+        Si le site n'affiche que « 3 h » (sans les minutes), l'heure est approximative et les alertes peuvent partir un peu en
+        avance, jamais en retard. Repasse sur l'enchère pour la préciser. Si l'extension n'arrive pas à lire l'heure de fin,
+        tu peux taper le temps restant dans l'encart « 🔔 » de l'enchère.</p>
+
+      <h2>Enchères suivies</h2>
+      <p id="encheres-vide" class="discret">Aucune enchère suivie pour l'instant.</p>
+      <table id="tableau-encheres" hidden>
+        <thead><tr><th>Carte</th><th>Fin</th><th>Prochaine alerte (PC)</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
     <h2>Ce que l'extension garde en mémoire</h2>
     <p class="discret">Tout reste dans ton navigateur : rien n'est envoyé à l'auteur ni à WikiMasters.</p>
     <p>Dernière lecture complète de ta collection : <span id="memoire-collection">aucune</span></p>
     <p>Totaux du jeu (page « Toutes les cartes ») : <span id="memoire-catalogue">jamais lus</span></p>
+    <p>Prix du marché relevés : <span id="memoire-marche">aucun</span></p>
+    <p>Cartes animées du jeu trouvées : <span id="memoire-animees">aucune recherche faite</span></p>
     <div id="bloc-historique">
       <h2>Historique de tes lectures</h2>
       <p id="historique-vide" class="discret">Aucune lecture pour l'instant.</p>
@@ -114,6 +198,8 @@
       </table>
     </div>
     <button id="effacer" class="danger">Effacer l'historique et la dernière lecture</button>
+    <button id="effacer-marche" class="danger">Effacer les prix du marché</button>
+    <button id="effacer-animees" class="danger">Effacer les cartes animées trouvées</button>
   </section>
 </main>
 <script src="commun.js"></script>
