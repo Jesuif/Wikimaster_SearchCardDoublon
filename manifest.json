@@ -1,21 +1,58 @@
 {
   "manifest_version": 3,
   "name": "WikiMasters Doublons",
-  "version": "1.9.0",
-  "description": "Doublons, cartes animées et manquantes, échanges et alertes d'enchères sur WikiMasters. Compte tes paquets et te prévient.",
-  "icons": { "128": "icone-128.png" },
-  "permissions": ["storage", "alarms", "notifications"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_title": "WikiMasters Doublons", "default_icon": { "128": "icone-128.png" } },
-  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "version": "1.16.0",
+  "description": "Doublons, cartes animées et manquantes, échanges, alertes d'enchères et amis sur WikiMasters. Compte tes paquets et te prévient.",
+  "icons": {
+    "128": "icone-128.png"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "WikiMasters Doublons",
+    "default_icon": {
+      "128": "icone-128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "content_scripts": [
     {
       "matches": [
         "https://www.wiki-masters.com/*",
         "https://wiki-masters.com/*"
       ],
-      "js": ["commun.js", "content.js"],
-      "css": ["style.css"]
+      "js": [
+        "reponses-site.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.wiki-masters.com/*",
+        "https://wiki-masters.com/*"
+      ],
+      "js": [
+        "commun.js",
+        "content.js"
+      ],
+      "css": [
+        "style.css"
+      ]
     }
-  ]
+  ],
+  "minimum_chrome_version": "111"
 }

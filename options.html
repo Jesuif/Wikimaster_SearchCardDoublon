@@ -37,6 +37,11 @@
     fieldset.etiquette textarea { width: 100%; box-sizing: border-box; font: 13px/1.4 system-ui, sans-serif; margin-top: 4px; }
     fieldset.etiquette.coupee { opacity: 0.55; }
     button.secondaire { background: #5b605b; }
+    /* 1.15 : la liste des amis (alerte « un ami a misé ») */
+    .liste-amis { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 2px 12px; }
+    .liste-amis label { margin: 2px 0; display: flex; align-items: center; gap: 6px; }
+    .liste-amis .ignore { color: #8a3b3b; }
+    .liste-amis button.petit { padding: 0 6px; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -54,6 +59,8 @@
     <label><input type="checkbox" id="manquantes"> Cartes manquantes et pourcentage par rareté (page « Toutes les cartes »)</label>
     <label><input type="checkbox" id="echanges"> Aide aux échanges : copie pour Discord et comparaison avec un ami</label>
     <label><input type="checkbox" id="marche"> Marché : relever les « mises actuelles » (jamais les mises de départ) pour estimer la valeur de mes cartes</label>
+    <p class="discret">Les cadres des bonnes affaires du Marché (en % ou en wikibidous sous l'estimation) se règlent
+      directement dans le panneau de l'extension, sur la page Marché.</p>
     <label><input type="checkbox" id="animeesJeu"> Bouton « Trouver les cartes animées du jeu » sur la page « Toutes les cartes »</label>
   </section>
 
@@ -156,7 +163,7 @@
     <label><input type="checkbox" id="encheres"> Me prévenir avant la fin des enchères que je suis</label>
     <div id="bloc-encheres">
       <label><input type="checkbox" id="enchereAuto"> Suivre automatiquement les enchères sur lesquelles j'ai misé
-        (quand je clique sur « Miser », ou quand j'ouvre l'onglet « Mes enchères » du Marché)</label>
+        (quand je clique sur « Miser », ou dès que je passe sur le Marché : le site y donne la liste de mes mises en cours)</label>
       <p class="discret">Tu peux aussi suivre une enchère à la main : sur sa page, bouton « 🔔 Me prévenir avant la fin ».
         L'extension ne mise jamais à ta place : elle regarde seulement tes clics et l'heure de fin.</p>
 
@@ -182,9 +189,41 @@
     </div>
   </section>
 
+  <section id="section-amis">
+    <h2>Amis : être prévenu quand un ami a misé</h2>
+    <label><input type="checkbox" id="alerteAmis"> M'avertir par une <b>fenêtre bleue</b> quand un de mes amis a misé sur l'enchère que je regarde</label>
+    <div id="bloc-amis">
+      <p class="discret">Tes amis sont lus sur la page <b>Amis</b> du site quand tu y passes (<span id="amis-lus">jamais lus : passe une fois sur la page Amis</span>).
+        La fenêtre te dit quel ami a misé, combien, et s'il mène. Rien n'est demandé au site : l'extension lit l'historique des mises de l'enchère affichée.</p>
+      <p><b>M'avertir pour :</b> (décoche un ami pour l'ignorer)</p>
+      <div id="liste-amis" class="liste-amis"></div>
+      <label>Ajouter un ami à la main (son pseudo sur le site) :
+        <input type="text" id="ami-ajout" maxlength="40" style="width: 14em" autocomplete="off" spellcheck="false">
+        <button id="ami-ajouter" type="button" class="petit">Ajouter</button></label>
+      <div class="ligne-delai">
+        <button id="amis-tous" type="button" class="petit">Tout cocher</button>
+        <button id="amis-aucun" type="button" class="petit">Tout décocher</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="section-partage">
+    <h2>Prix partagés (fichier dans Google Drive)</h2>
+    <p>Le bouton « ☁️ Mettre à jour les prix » du panneau lit le fichier des prix partagé, ajoute à l'extension
+      les prix qui lui manquent, puis renvoie le fichier complet (avec tes prix en plus). Il remplace alors
+      le bouton « Exporter les prix du marché (CSV) ». Pas besoin de compte Google : il suffit de l'adresse
+      du script et du code secret, donnés par la personne qui a installé le script (voir le README).</p>
+    <label>Adresse du script : <input type="url" id="partage-adresse" style="width: 100%"
+      placeholder="https://script.google.com/macros/s/…/exec"></label>
+    <label>Code secret : <input type="password" id="partage-code" style="width: 16em" autocomplete="off"></label>
+    <p class="discret">Le code n'est jamais réaffiché : une fois enregistré, le champ reste vide. Tape un nouveau code pour le changer.</p>
+    <button id="partage-tester" type="button">Tester</button>
+    <p class="discret" id="partage-etat"></p>
+  </section>
+
   <section>
     <h2>Ce que l'extension garde en mémoire</h2>
-    <p class="discret">Tout reste dans ton navigateur : rien n'est envoyé à l'auteur ni à WikiMasters.</p>
+    <p class="discret">Tout reste dans ton navigateur : rien n'est envoyé à l'auteur ni à WikiMasters (sauf, si tu l'utilises, le fichier des prix partagés, envoyé au script Google réglé plus haut).</p>
     <p>Dernière lecture complète de ta collection : <span id="memoire-collection">aucune</span></p>
     <p>Totaux du jeu (page « Toutes les cartes ») : <span id="memoire-catalogue">jamais lus</span></p>
     <p>Prix du marché relevés : <span id="memoire-marche">aucun</span></p>

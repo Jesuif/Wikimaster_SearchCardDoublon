@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.9.0 - options.js
+//  WikiMasters Doublons 1.16.0 - options.js
 //  La page des réglages : elle lit et enregistre les réglages dans la
 //  mémoire de l'extension (api.storage.local). commun.js est chargé avant
 //  ce fichier : il fournit api, REGLAGES_PAR_DEFAUT, lireReglages...
@@ -11,7 +11,8 @@ const estFirefox = typeof globalThis.browser !== "undefined" && typeof browser.r
 // Les cases à cocher : leur id dans la page est le nom du réglage.
 // 1.8 : les enchères et les cartes animées du jeu.
 const CASES = ["surlignerAnimees", "etiquettes", "statistiques", "historique", "manquantes", "echanges", "badge",
-  "notifPC", "notifTel", "alerteAvant", "marche", "animeesJeu", "encheres", "enchereAuto", "enchereNotifPC", "enchereNotifTel"];
+  "notifPC", "notifTel", "alerteAvant", "marche", "animeesJeu", "encheres", "enchereAuto", "enchereNotifPC", "enchereNotifTel",
+  "alerteAmis"]; // 1.15
 const CASES_TELEPHONE = ["notifTel", "enchereNotifTel"]; // elles demandent une autorisation dans Firefox
 const champs = {};
 for (const nom of [...CASES, "canalNtfy", "minutesParPaquet", "alerteA", "patienceMinutes", "pagesMax"]) {
@@ -43,6 +44,7 @@ function actualiserBlocs(r) {
   document.getElementById("bloc-historique").hidden = !r.historique;
   document.getElementById("bloc-encheres").hidden = !r.encheres;
   document.getElementById("section-etiquettes").hidden = !r.etiquettes; // 1.9
+  document.getElementById("bloc-amis").hidden = !r.alerteAmis; // 1.15
   champs.alerteA.disabled = !r.alerteAvant;
 }
 
@@ -62,6 +64,7 @@ async function enregistrer() {
   const pages = parseInt(champs.pagesMax.value, 10);
   reglages.pagesMax = pages >= 10 && pages <= 20000 ? pages : REGLAGES_PAR_DEFAUT.pagesMax;
   champs.pagesMax.value = String(reglages.pagesMax);
+  // 1.14 : les seuils des cadres du Marché se règlent dans le panneau (ils sont gardés tels quels ici).
   reglages.enchereDelais = lireDelais();
   afficherDelais(reglages.enchereDelais);
   actualiserBlocs(reglages);
@@ -318,7 +321,7 @@ boutonEffacer.addEventListener("click", async () => {
     }, 4000);
     return;
   }
-  await api.storage.local.remove(["collection", "historique", "animations"]);
+  await api.storage.local.remove(["collection", "historique", "animations", "comparaison", "manquantes", "vuePanneau"]); // 1.15 : et les listes gardées
   confirmation = false;
   boutonEffacer.textContent = "Effacé !";
 });
@@ -547,3 +550,137 @@ afficherEtatPC();
 afficherMemoire();
 afficherEncheres();
 afficherEtiquettesSite(); // 1.9 : dessine aussi la liste des étiquettes
+
+
+// ---------------------------------------------------------------------
+//  1.15 : les amis de l'alerte « un ami a misé sur cette enchère »
+//  amis = { liste: [{ nom, affiche }], lu } (lus sur la page Amis du site) ;
+//  amisPerso = [noms] (ajoutés ici à la main) ; amisIgnores = [noms] (décochés).
+// ---------------------------------------------------------------------
+const zoneAmis = document.getElementById("liste-amis");
+
+async function lireAmis() {
+  const lu = await api.storage.local.get(["amis", "amisPerso", "amisIgnores"]);
+  return {
+    site: lu.amis && Array.isArray(lu.amis.liste) ? lu.amis.liste : [],
+    lu: lu.amis ? lu.amis.lu : null,
+    perso: Array.isArray(lu.amisPerso) ? lu.amisPerso : [],
+    ignores: Array.isArray(lu.amisIgnores) ? lu.amisIgnores : []
+  };
+}
+
+async function afficherAmis() {
+  const { site, lu, perso, ignores } = await lireAmis();
+  document.getElementById("amis-lus").textContent = lu
+    ? `${site.length} ami(s), lus le ${dateLisible(lu)}` : "jamais lus : passe une fois sur la page Amis du site";
+  const lignes = site.map(ami => ({ nom: ami.nom, affiche: ami.affiche || ami.nom, perso: false }));
+  for (const nom of perso) if (!lignes.some(l => memePseudo(l.nom, nom))) lignes.push({ nom: nom, affiche: nom, perso: true });
+  // Un ami ignoré qui n'est plus dans la liste reste affiché, pour pouvoir le recocher.
+  for (const nom of ignores) if (!lignes.some(l => memePseudo(l.nom, nom))) lignes.push({ nom: nom, affiche: nom, perso: false, ancien: true });
+  lignes.sort((a, b) => a.affiche.localeCompare(b.affiche, "fr", { sensitivity: "base" }));
+  zoneAmis.replaceChildren(...lignes.map(ligne => {
+    const etiquette = document.createElement("label");
+    const coche = document.createElement("input");
+    coche.type = "checkbox";
+    coche.checked = !ignores.some(nom => memePseudo(nom, ligne.nom));
+    coche.addEventListener("change", () => changerIgnore(ligne.nom, !coche.checked));
+    const nom = document.createElement("span");
+    nom.textContent = ligne.affiche + (ligne.perso ? " (ajouté à la main)" : ligne.ancien ? " (plus dans tes amis)" : "");
+    if (!coche.checked) nom.className = "ignore";
+    etiquette.append(coche, nom);
+    if (ligne.perso) {
+      const retirer = document.createElement("button");
+      retirer.type = "button";
+      retirer.className = "petit";
+      retirer.textContent = "Retirer";
+      retirer.addEventListener("click", async evenement => {
+        evenement.preventDefault();
+        const { perso: actuels } = await lireAmis();
+        await api.storage.local.set({ amisPerso: actuels.filter(n => !memePseudo(n, ligne.nom)) });
+      });
+      etiquette.appendChild(retirer);
+    }
+    return etiquette;
+  }));
+  if (!lignes.length) {
+    const vide = document.createElement("p");
+    vide.className = "discret";
+    vide.textContent = "Aucun ami connu pour l'instant.";
+    zoneAmis.appendChild(vide);
+  }
+}
+
+async function changerIgnore(nom, ignorer) {
+  const { ignores } = await lireAmis();
+  const autres = ignores.filter(n => !memePseudo(n, nom));
+  await api.storage.local.set({ amisIgnores: ignorer ? [...autres, nom] : autres });
+}
+
+document.getElementById("ami-ajouter").addEventListener("click", async () => {
+  const champ = document.getElementById("ami-ajout");
+  const nom = champ.value.trim();
+  if (!nom) return;
+  const { perso } = await lireAmis();
+  if (!perso.some(n => memePseudo(n, nom))) await api.storage.local.set({ amisPerso: [...perso, nom] });
+  champ.value = "";
+});
+document.getElementById("ami-ajout").addEventListener("keydown", evenement => {
+  if (evenement.key === "Enter") {
+    evenement.preventDefault();
+    document.getElementById("ami-ajouter").click();
+  }
+});
+document.getElementById("amis-tous").addEventListener("click", () => api.storage.local.set({ amisIgnores: [] }));
+document.getElementById("amis-aucun").addEventListener("click", async () => {
+  const { site, perso } = await lireAmis();
+  await api.storage.local.set({ amisIgnores: [...site.map(ami => ami.nom), ...perso] });
+});
+api.storage.onChanged.addListener(changements => {
+  if (changements.amis || changements.amisPerso || changements.amisIgnores) afficherAmis();
+});
+afficherAmis();
+
+
+// ---------------------------------------------------------------------
+//  1.14 : les prix partagés (adresse du script Google et code secret)
+// ---------------------------------------------------------------------
+const champPartageAdresse = document.getElementById("partage-adresse");
+const champPartageCode = document.getElementById("partage-code");
+const etatPartage = document.getElementById("partage-etat");
+const REGEX_SCRIPT = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/;
+
+async function afficherPartage() {
+  const { partage = {} } = await api.storage.local.get("partage");
+  champPartageAdresse.value = partage.adresse || "";
+  champPartageCode.value = ""; // le code n'est jamais réaffiché
+  champPartageCode.placeholder = partage.code ? "•••••• (enregistré)" : "";
+  etatPartage.textContent = !(partage.adresse && partage.code) ? "Pas réglé : le bouton classique « Exporter les prix du marché (CSV) » reste affiché."
+    : partage.derniereMaj ? `Dernière mise à jour depuis ce navigateur : ${new Date(partage.derniereMaj).toLocaleString("fr-FR")}.`
+    : "Réglé. Pas encore de mise à jour depuis ce navigateur.";
+}
+async function enregistrerPartage() {
+  const adresse = champPartageAdresse.value.trim();
+  if (adresse && !REGEX_SCRIPT.test(adresse)) {
+    etatPartage.textContent = "⚠ Cette adresse n'est pas celle d'un script Google déployé (elle doit commencer par https://script.google.com/macros/s/ et finir par /exec). Non enregistrée.";
+    return;
+  }
+  const { partage = {} } = await api.storage.local.get("partage");
+  // Champ vide : on garde le code déjà enregistré (il n'est jamais réaffiché).
+  const code = champPartageCode.value.trim() || partage.code || "";
+  await api.storage.local.set({ partage: { ...partage, adresse: adresse, code: code } });
+  afficherPartage();
+}
+champPartageAdresse.addEventListener("change", enregistrerPartage);
+champPartageCode.addEventListener("change", enregistrerPartage);
+document.getElementById("partage-tester").addEventListener("click", async () => {
+  await enregistrerPartage();
+  etatPartage.textContent = "Test en cours…";
+  const reponse = await api.runtime.sendMessage({ type: "partage-lire" }).catch(e => ({ erreur: e.message }));
+  if (reponse && reponse.erreur === "pas-configure") etatPartage.textContent = "⚠ Indique l'adresse du script ET le code secret.";
+  else if (!reponse || reponse.erreur) etatPartage.textContent = `⚠ Échec : ${reponse ? reponse.erreur : "pas de réponse"}.`;
+  else {
+    const lignes = reponse.texte.split(/\r?\n/).filter(l => l.trim()).length;
+    etatPartage.textContent = `✓ Ça marche : le fichier partagé contient ${Math.max(0, lignes - 1)} carte(s). (Le test ne modifie rien.)`;
+  }
+});
+afficherPartage();

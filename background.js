@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.9.0 - background.js
+//  WikiMasters Doublons 1.16.0 - background.js
 //  Le « script d'arrière-plan » : il tourne même quand aucune page
 //  WikiMasters n'est ouverte, tant que le navigateur est lancé.
 //  Son rôle : estimer ton stock de paquets, l'afficher sur l'icône,
@@ -209,6 +209,10 @@ api.alarms.onAlarm.addListener(async alarme => {
     await alerteEnchere(alarme.name);
     return;
   }
+  if (alarme.name === ALARME_ENCHERES_MENAGE) { // 1.12 : une enchère vient de finir il y a plus d'une minute
+    await nettoyerEncheres();
+    return;
+  }
   if (alarme.name === ALARME_ENCHERES_SYNCHRO) {
     await nettoyerEncheres();
     await programmerEncheres();
@@ -388,7 +392,9 @@ function messagesEncheres(reglages, encheres, maintenant) {
     .filter(alerte => alerte.quand - maintenant < NTFY_DELAI_MAX)
     .map(alerte => ({ id: `enchere-${alerte.id}-${alerte.minutes}`, quand: alerte.quand, titre: titreEnchere(alerte.enchere),
       texte: texteEnchere(alerte.enchere, alerte.minutes * MINUTE), icone: "hourglass_flowing_sand",
-      clic: adresseEnchere(alerte.id), enchere: true }));
+      clic: adresseEnchere(alerte.id), enchere: true,
+      // 1.15 : ce qui, s'il change, demande de renvoyer l'alerte programmée (tu mènes / surenchéri, dernière mise).
+      cle: `${alerte.enchere.statut || ""}|${alerte.enchere.prix || ""}` }));
 }
 
 // Programme un message chez ntfy, qui le livrera à l'heure dite, même si ton PC est éteint.
@@ -437,10 +443,18 @@ async function synchroniserTelephone() {
   }
 
   // 2) On programme ce qui est nouveau ou dont l'heure a changé ; le reste ne bouge pas.
-  const nouveaux = {};
+  // 1.15 : une alerte d'enchère pas encore livrée est aussi renvoyée quand ton statut (tu mènes / surenchéri)
+  // ou la dernière mise vue a changé : avant, le téléphone pouvait annoncer « Tu mènes » alors que tu étais surenchéri.
+  const clesAvant = memeCanal && deja.cles ? deja.cles : {};
+  const nouveaux = {}, cles = {};
   for (const message of aEnvoyer) {
-    const dejaBon = memeCanal && Math.abs((programmes[message.id] ?? 0) - message.quand) < UNE_MINUTE;
-    if (dejaBon || await programmerNtfy(canal, message)) nouveaux[message.id] = message.quand;
+    const memeHeure = memeCanal && Math.abs((programmes[message.id] ?? 0) - message.quand) < UNE_MINUTE;
+    const memeTexte = !message.cle || clesAvant[message.id] === undefined || clesAvant[message.id] === message.cle
+      || (programmes[message.id] ?? 0) <= maintenant; // déjà livrée : on ne la renvoie pas pour un simple changement de statut
+    if ((memeHeure && memeTexte) || await programmerNtfy(canal, message)) {
+      nouveaux[message.id] = message.quand;
+      if (message.cle) cles[message.id] = (memeHeure && memeTexte && clesAvant[message.id] !== undefined) ? clesAvant[message.id] : message.cle;
+    }
   }
 
   // 3) Nouveau en 1.8 : on se souvient des alertes d'enchères déjà livrées tant que l'enchère court.
@@ -453,7 +467,7 @@ async function synchroniserTelephone() {
       }
     }
   }
-  await api.storage.local.set({ ntfy: Object.keys(nouveaux).length ? { canal: canal, messages: nouveaux } : null });
+  await api.storage.local.set({ ntfy: Object.keys(nouveaux).length ? { canal: canal, messages: nouveaux, cles: cles } : null });
 }
 
 
@@ -502,6 +516,19 @@ async function envoyerTest() {
 
 const PREFIXE_ALARME_ENCHERE = "enchere|";            // enchere|<identifiant>|<minutes avant la fin>
 const ALARME_ENCHERES_SYNCHRO = "encheres-synchro";  // vérification régulière (toutes les 30 minutes)
+const ALARME_ENCHERES_MENAGE = "encheres-menage";    // 1.12 : retirer les enchères finies depuis plus d'une minute
+const OUBLI_APRES_FIN = MINUTE;                       // 1.12 : une enchère finie n'est plus suivie après 1 minute
+const FINIES_GARDEES = 7 * JOUR;                      // 1.12 : la mémoire « encheresFinies » (prix d'achat) est gardée 7 jours
+
+// 1.12 : depuis quand l'enchère est finie (ms), ou null si elle ne l'est pas (ou pas sûrement).
+// - finMax dépassée : la fin la plus tardive possible est passée ;
+// - « Terminée » / « Vendue » vu sur le site (termineeVue, écrit par content.js).
+function finieDepuis(enchere, maintenant) {
+  const moments = [];
+  if (enchere.finMax && enchere.finMax <= maintenant) moments.push(enchere.finMax);
+  if (enchere.terminee) moments.push(enchere.termineeVue || enchere.vu || maintenant);
+  return moments.length ? Math.min(...moments) : null;
+}
 
 function adresseEnchere(id) {
   return `https://www.wiki-masters.com/marketplace/${id}`;
@@ -573,6 +600,21 @@ async function programmerEncheres() {
   } else {
     await api.alarms.clear(ALARME_ENCHERES_SYNCHRO);
   }
+
+  // 1.12 : le ménage des enchères finies, programmé une minute après la fin la plus proche
+  // (la fin la plus tardive possible, ou le moment où « Terminée » a été vu sur le site).
+  const prochainMenage = Object.values(encheres).map(enchere => {
+    const finie = finieDepuis(enchere, maintenant);
+    if (finie !== null) return finie + OUBLI_APRES_FIN;
+    return enchere.finMax ? enchere.finMax + OUBLI_APRES_FIN : null;
+  }).filter(quand => quand !== null).sort((a, b) => a - b)[0];
+  if (prochainMenage === undefined) {
+    await api.alarms.clear(ALARME_ENCHERES_MENAGE);
+  } else if (prochainMenage <= maintenant) {
+    await nettoyerEncheres(); // déjà dû : tout de suite (l'écriture relancera programmerEncheres)
+  } else if (!heures.has(ALARME_ENCHERES_MENAGE) || Math.abs(heures.get(ALARME_ENCHERES_MENAGE) - (prochainMenage + SECONDE)) > SECONDE) {
+    await api.alarms.create(ALARME_ENCHERES_MENAGE, { when: prochainMenage + SECONDE });
+  }
 }
 
 // Une alarme d'enchère sonne : on prévient sur le PC (une seule fois par alerte).
@@ -607,26 +649,121 @@ async function alerteEnchere(nomAlarme) {
   });
 }
 
-// Le ménage : une enchère terminée depuis plus d'un jour est oubliée, comme une enchère dont
-// on ne connaît pas la fin et qu'on n'a pas revue depuis 14 jours.
+// Le ménage. 1.12 : une enchère finie depuis plus d'UNE MINUTE n'est plus suivie (avant : un jour).
+// Elle passe dans la mémoire « encheresFinies » (7 jours), qui ne sert qu'aux prix d'achat (1.10) :
+// si tu la menais au dernier passage, ton achat pourra encore être reconnu en repassant sur l'enchère
+// ou sur le Marché. Une enchère dont on ne connaît pas la fin et pas revue depuis 14 jours est oubliée.
 async function nettoyerEncheres() {
-  const { encheres = {}, encheresEnvoyees = {}, encheresIgnorees = {} } =
-    await api.storage.local.get(["encheres", "encheresEnvoyees", "encheresIgnorees"]);
+  const { encheres = {}, encheresEnvoyees = {}, encheresIgnorees = {}, encheresFinies = {} } =
+    await api.storage.local.get(["encheres", "encheresEnvoyees", "encheresIgnorees", "encheresFinies"]);
   const maintenant = Date.now();
-  let change = false;
+  let change = false, finiesChangees = false;
   for (const [id, enchere] of Object.entries(encheres)) {
-    const finie = enchere.terminee || (enchere.finMax && enchere.finMax < maintenant);
+    const finie = finieDepuis(enchere, maintenant);
     const depuis = maintenant - Math.max(enchere.finMax || 0, enchere.vu || 0, enchere.suivieLe || 0);
-    if ((finie && depuis > JOUR) || (!enchere.fin && depuis > 14 * JOUR)) {
+    if (finie !== null && maintenant - finie > OUBLI_APRES_FIN) {
+      encheresFinies[id] = { ...enchere, oublieeLe: maintenant };
+      finiesChangees = true;
       delete encheres[id];
       change = true;
+    } else if (!enchere.fin && depuis > 14 * JOUR) {
+      delete encheres[id];
+      change = true;
+    }
+  }
+  for (const [id, enchere] of Object.entries(encheresFinies)) {
+    if (maintenant - (enchere.oublieeLe || 0) > FINIES_GARDEES) {
+      delete encheresFinies[id];
+      finiesChangees = true;
     }
   }
   const envoyees = Object.fromEntries(Object.entries(encheresEnvoyees).filter(([cle]) => encheres[cle.split("|")[0]]));
   const ignorees = Object.fromEntries(Object.entries(encheresIgnorees).filter(([, date]) => maintenant - date < 30 * JOUR));
   const aEcrire = {};
   if (change) aEcrire.encheres = encheres;
+  if (finiesChangees) aEcrire.encheresFinies = encheresFinies;
   if (Object.keys(envoyees).length !== Object.keys(encheresEnvoyees).length) aEcrire.encheresEnvoyees = envoyees;
   if (Object.keys(ignorees).length !== Object.keys(encheresIgnorees).length) aEcrire.encheresIgnorees = ignorees;
   if (Object.keys(aEcrire).length) await api.storage.local.set(aEcrire);
 }
+
+
+// ---------------------------------------------------------------------
+//  1.14 : LES PRIX DU MARCHÉ PARTAGÉS (fichier dans Google Drive)
+//  Le bouton « ☁️ Mettre à jour les prix » du panneau lit le fichier des prix
+//  partagé, l'ajoute aux prix de l'extension (seulement ce qui manque, comme
+//  l'import), puis renvoie le fichier complet.
+//  Le fichier est lu et écrit par un petit script Google (Google Apps Script)
+//  installé par le propriétaire du fichier : personne n'a besoin de compte Google,
+//  il suffit de l'adresse du script et du code secret (réglages de l'extension).
+//  Le fichier lui-même peut rester privé dans le Drive de son propriétaire.
+//  Rien n'est envoyé à WikiMasters.
+// ---------------------------------------------------------------------
+
+async function lirePartage() {
+  const { partage = {} } = await api.storage.local.get("partage");
+  return partage;
+}
+
+function adresseScriptValide(adresse) {
+  return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(String(adresse || "").trim());
+}
+
+// Le script répond toujours en JSON : { ok: true, ... } ou { ok: false, erreur: "..." }.
+async function appelScript(options, adresse) {
+  let reponse;
+  try {
+    reponse = await fetch(adresse, { ...options, redirect: "follow", cache: "no-store" });
+  } catch (erreur) {
+    throw new Error("le script Google ne répond pas (connexion internet ?)");
+  }
+  const texte = await reponse.text();
+  let donnees;
+  try { donnees = JSON.parse(texte); } catch (e) {
+    throw new Error(/<html/i.test(texte)
+      ? "le script Google a renvoyé une page web : vérifie qu'il est déployé avec « Qui a accès : Tout le monde »"
+      : `réponse illisible du script Google (${reponse.status})`);
+  }
+  if (!donnees.ok) throw new Error(donnees.erreur || "erreur du script Google");
+  return donnees;
+}
+
+// Étape 1 du bouton : lire le fichier partagé. Renvoie { texte }.
+async function partageLireFichier() {
+  const partage = await lirePartage();
+  if (!adresseScriptValide(partage.adresse) || !partage.code) return { erreur: "pas-configure" };
+  // En POST : le code voyage dans le corps de la demande, jamais dans l'adresse (ni historique, ni journaux).
+  let donnees;
+  try {
+    donnees = await appelScript({ method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "lire", code: partage.code }) }, partage.adresse.trim());
+  } catch (erreur) {
+    // La toute première version du script ne savait pas lire en POST : elle répondait « fichier absent ».
+    if (/fichier absent/i.test(erreur.message)) {
+      throw new Error("le script Google déployé n'est pas à jour. Recolle le fichier « script-google-prix-partages.gs » "
+        + "sur script.google.com, enregistre, puis Déployer → Gérer les déploiements → crayon → Version : Nouvelle version → Déployer");
+    }
+    throw erreur;
+  }
+  if (typeof donnees.csv !== "string") throw new Error("le script Google n'a pas renvoyé le fichier (script pas à jour ?)");
+  return { texte: donnees.csv };
+}
+
+// Étape 2 du bouton : envoyer le fichier complet. Le script le fusionne avec le fichier actuel
+// (si quelqu'un a envoyé entre-temps, ses cartes ne sont pas perdues).
+async function partageEcrireFichier(texte) {
+  const partage = await lirePartage();
+  if (!adresseScriptValide(partage.adresse) || !partage.code) return { erreur: "pas-configure" };
+  // En « text/plain » : c'est ce que le script Google accepte le plus simplement.
+  const donnees = await appelScript({ method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "ecrire", code: partage.code, csv: texte }) }, partage.adresse.trim());
+  await api.storage.local.set({ partage: { ...(await lirePartage()), derniereMaj: Date.now() } });
+  return { ok: true, lignes: donnees.lignes, ajoutees: donnees.ajoutees };
+}
+
+api.runtime.onMessage.addListener((message, expediteur, repondre) => {
+  if (message.type !== "partage-lire" && message.type !== "partage-ecrire") return;
+  const tache = message.type === "partage-lire" ? partageLireFichier() : partageEcrireFichier(message.texte);
+  tache.then(repondre, erreur => repondre({ erreur: erreur.message || String(erreur) }));
+  return true;
+});

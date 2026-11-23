@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.9.0 - commun.js
+//  WikiMasters Doublons 1.16.0 - commun.js
 //  Nouveau en 1.3 : ce fichier est partagé par les trois parties de
 //  l'extension (content.js, background.js et la page des réglages).
 //  On y range ce qui doit être identique partout, pour ne l'écrire qu'une fois.
@@ -24,6 +24,17 @@ const REGLAGES_PAR_DEFAUT = {
   alerteAvant: false,       // prévenir aussi avant le stock plein...
   alerteA: 8,               // ...quand le stock atteint 8 paquets
   marche: true,             // nouveau en 1.4 : relever et afficher les mises actuelles sur la page Marché
+  // 1.10 : les cadres du Marché apparaissent quand la mise est AU MOINS ce pourcentage sous l'estimation
+  // (25 = mise à 75 % ou moins de l'estimation, comme avant).
+  ecartMoyenne: 25,         // cadre jaune → rouge : écart avec le prix moyen du site
+  ecartMax: 25,             // cadre bleu : écart avec le prix le plus haut trouvé au Marché
+  // 1.10 : un écart en wikibidous, en plus du pourcentage (0 = pas utilisé).
+  ecartMoyenneMontant: 0,
+  ecartMaxMontant: 0,
+  // 1.14 : pour chaque cadre, SOIT le % SOIT le montant (réglés dans le panneau du Marché).
+  // null = pas encore choisi : « montant » si un montant avait été donné avant, sinon « pourcent ».
+  ecartMoyenneMode: null,
+  ecartMaxMode: null,
 
   // Nouveau en 1.8 : les enchères suivies.
   encheres: true,           // me prévenir avant la fin des enchères que je suis
@@ -31,6 +42,9 @@ const REGLAGES_PAR_DEFAUT = {
   enchereDelais: [60, 10],  // les alertes, en minutes avant la fin (ici : 1 h avant, puis 10 min avant)
   enchereNotifPC: true,     // alertes d'enchères sur ce PC
   enchereNotifTel: false,   // alertes d'enchères sur le téléphone (même canal ntfy que les paquets)
+  // 1.15 : une fenêtre bleue quand un de mes amis a misé sur l'enchère que je regarde
+  // (les amis à ignorer sont dans la mémoire « amisIgnores », réglables dans la page des réglages).
+  alerteAmis: true,
 
   // Nouveau en 1.8 : la lecture page par page.
   animeesJeu: true,         // bouton « Trouver les cartes animées » sur « Toutes les cartes »
@@ -182,6 +196,12 @@ function estSeulementUneDuree(texte) {
     .replace(/\d{2}(?=\s*$)/, "") // « 3h12 »
     .replace(/[\s,.:\-–]+/g, "");
   return reste === "" && lireDuree(t) !== null;
+}
+
+// 1.15 : la précision d'une lecture de fin d'enchère. Un compte à rebours à la seconde (« 12:45 », « 3m 12s »)
+// est « précis » : l'heure de fin enregistrée suit alors le site à quelques secondes près.
+function lecturePrecise(precisionMs) {
+  return Number.isFinite(precisionMs) && precisionMs <= SECONDE;
 }
 
 // Lit une date de fin écrite en entier : « 22/11/2026 18:00 », « le 22/11 à 18h00 », « 22 nov. à 18:00 ».
@@ -349,4 +369,85 @@ function nomPropose(etiquette, surLeSite) {
     if (!meilleur || nombre > surLeSite[meilleur]) meilleur = nom; // la plus utilisée
   }
   return meilleur || etiquette.nom;
+}
+
+
+// ---------------------------------------------------------------------
+//  1.15 : LES NOMS DE CARTES AVEC DES PARENTHÈSES (et autres signes)
+//  La recherche du site ne trouve pas « Bob Marley (chanson) » quand on tape le nom entier :
+//  les parenthèses (et [ ] { } * + ? | ^ $ \) y ont un sens spécial. L'extension tape donc
+//  seulement le titre principal (« Bob Marley »), puis choisit elle-même, parmi les résultats,
+//  la carte qui porte exactement le nom voulu.
+// ---------------------------------------------------------------------
+const REGEX_SIGNES_RECHERCHE = /[()[\]{}*+?|^$\\]/;
+
+// Le texte à taper dans une recherche du site : « Bob Marley (chanson) » → « Bob Marley ».
+// Un nom sans signe spécial est tapé tel quel. Si le titre principal est trop court
+// (« C++ (langage) » → « C »), on prend le morceau le plus long du nom.
+function texteDeRecherche(nom) {
+  const t = String(nom || "").replace(/\s+/g, " ").trim();
+  if (!REGEX_SIGNES_RECHERCHE.test(t)) return t;
+  const morceaux = t.split(/[()[\]{}*+?|^$\\]+/).map(m => m.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (morceaux.length && morceaux[0].length >= 3) return morceaux[0];
+  const plusLong = [...morceaux].sort((a, b) => b.length - a.length)[0];
+  return plusLong || t.replace(/[()[\]{}*+?|^$\\]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Vrai si deux noms de cartes désignent la même carte : exactement le même texte, ou le même une fois
+// les majuscules, accents, espaces et signes mis de côté (« Bob Marley (chanson) » = « Bob Marley(chanson) »).
+function memeCarte(a, b) {
+  if (a === undefined || a === null || b === undefined || b === null) return false;
+  const x = String(a).trim(), y = String(b).trim();
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const nx = normaliser(x);
+  return nx !== "" && nx === normaliser(y);
+}
+
+// Vrai si le nom affiché d'une carte contient le texte cherché (pour savoir si les résultats sont arrivés).
+function nomContient(nom, cherche) {
+  return normaliser(nom).includes(normaliser(cherche));
+}
+
+
+// ---------------------------------------------------------------------
+//  1.15 : LES AMIS SUR UNE ENCHÈRE
+// ---------------------------------------------------------------------
+
+// Deux pseudos sont les mêmes sans tenir compte des majuscules ni des espaces autour.
+function memePseudo(a, b) {
+  return Boolean(a) && Boolean(b) && String(a).trim().toLocaleLowerCase("fr") === String(b).trim().toLocaleLowerCase("fr");
+}
+
+// Les amis présents parmi les enchérisseurs d'une enchère, sans les amis ignorés ni toi-même.
+// amis = [{ nom, affiche }] ; encherisseurs = [pseudos] ; ignores = [noms] ; moi = ton pseudo (ou null).
+// Renvoie les amis trouvés, dans l'ordre de la liste d'amis, sans doublon.
+function amisParmiEncherisseurs(encherisseurs, amis, ignores, moi) {
+  const trouves = [];
+  for (const ami of amis || []) {
+    const noms = [ami.nom, ami.affiche].filter(Boolean);
+    if (!noms.length || noms.some(n => memePseudo(n, moi))) continue;
+    if ((ignores || []).some(i => noms.some(n => memePseudo(n, i)))) continue;
+    if (!(encherisseurs || []).some(e => noms.some(n => memePseudo(n, e)))) continue;
+    if (!trouves.some(t => memePseudo(t.nom, ami.nom))) trouves.push(ami);
+  }
+  return trouves;
+}
+
+
+// ---------------------------------------------------------------------
+//  1.15 : LE FILTRE « SEULEMENT LES MISES JUSQU'À … » ET LE TRI DU SITE
+// ---------------------------------------------------------------------
+
+// Vrai si les mises affichées vont de la plus haute à la plus basse (tri « mise la plus haute ») :
+// au moins 3 mises, jamais en hausse, et au moins une baisse.
+function prixDecroissants(prix) {
+  const liste = (prix || []).filter(p => Number.isFinite(p));
+  if (liste.length < 3) return false;
+  let baisse = false;
+  for (let i = 1; i < liste.length; i++) {
+    if (liste[i] > liste[i - 1]) return false;
+    if (liste[i] < liste[i - 1]) baisse = true;
+  }
+  return baisse;
 }

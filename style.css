@@ -63,10 +63,10 @@
   border-radius: 6px;
 }
 
-#wmd-resultats table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-#wmd-resultats th { cursor: pointer; text-align: left; border-bottom: 1px solid #555; }
+#wmd-resultats table, #wmd-prix-page table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+#wmd-resultats th, #wmd-prix-page th { cursor: pointer; text-align: left; border-bottom: 1px solid #555; }
 #wmd-resultats th:hover { color: #7fd1a4; }
-#wmd-resultats td { padding: 2px 4px; border-bottom: 1px solid #333; }
+#wmd-resultats td, #wmd-prix-page td { padding: 2px 4px; border-bottom: 1px solid #333; }
 #wmd-resultats .wmd-paquet { margin: 6px 0; }
 
 /* Une couleur par rareté */
@@ -319,3 +319,301 @@
 #wmd-panneau button.wmd-suggestion { background: #3a4f6f; text-align: left; }
 #wmd-panneau button.wmd-suggestion:disabled { background: #263326; color: #9fd0a8; cursor: default; }
 #wmd-panneau.wmd-reduit #wmd-suggestions.wmd-bloc { margin: 8px 0 0; }
+
+/* Nouveau en 1.10 : le prix d'achat des cartes remportées aux enchères */
+.wmd-badge-achat {
+  position: absolute;
+  top: 32px;
+  left: 6px;
+  z-index: 40;
+  height: 20px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: #ff9f43;
+  color: #2b1600;
+  font: bold 12px/20px system-ui, sans-serif;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;      /* le badge ne bloque pas les clics sur la carte */
+}
+.wmd-badge-achat::before { content: attr(data-texte); }
+.wmd-achat-fiche { color: #ffb66b; font-weight: bold; }
+
+/* 1.11 : les noms de cartes cliquables du panneau, et le menu « où trouver cette carte ? » */
+#wmd-panneau a.wmd-carte-cliquable {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+#wmd-panneau a.wmd-carte-cliquable:hover { text-decoration: underline solid; color: #9fd0ff; }
+#wmd-panneau .wmd-menu-carte {
+  position: fixed;              /* placé par l'extension sous le nom cliqué */
+  z-index: 2147483647;
+  width: 250px;
+  padding: 6px;
+  background: #23262a;
+  border: 1px solid #4aa3ff;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+}
+#wmd-panneau .wmd-menu-titre {
+  padding: 2px 6px 6px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#wmd-panneau button.wmd-menu-choix {
+  display: block;
+  width: 100%;
+  margin: 2px 0;
+  padding: 6px 8px;
+  text-align: left;
+  background: #2f3a46;
+}
+#wmd-panneau button.wmd-menu-choix:hover, #wmd-panneau button.wmd-menu-choix:focus { background: #3a5a7b; outline: none; }
+#wmd-panneau button.wmd-menu-choix span { display: block; }
+#wmd-panneau button.wmd-menu-choix small { display: block; color: #b9c2cc; font-weight: normal; font-size: 11px; }
+/* La carte trouvée sur la page : un contour bleu qui pulse quelques secondes */
+.wmd-carte-trouvee { outline: 3px solid #4aa3ff !important; outline-offset: 2px; animation: wmd-pulse 0.8s ease-in-out 4; }
+@keyframes wmd-pulse { 50% { outline-color: rgba(74, 163, 255, 0.2); } }
+
+/* Nouveau en 1.10 : l'avertissement sur le nombre de requêtes (recherche chez les amis) */
+#wmd-panneau .wmd-avertissement { margin-top: 4px; padding: 4px 6px; border-radius: 6px; background: rgba(255, 159, 67, 0.15); color: #ffb66b; }
+/* 1.10 : le bouton « Vérifier si un de mes amis la possède » et l'heure de sa dernière utilisation */
+.wmd-prix-fiche .wmd-amis { clear: both; margin-top: 6px; }
+.wmd-prix-fiche .wmd-amis .wmd-chercher-marche { float: none; margin: 0 0 2px; }
+
+/* 1.13 : affichage allégé du Marché (case « Affichage allégé du Marché » du panneau).
+   Seuls la rareté, le nom, la mise et la durée restent ; les cadres de l'extension aussi. */
+html.wmd-marche-compact .flex-wrap:has(> [id^="marketplace-auction-"]) { gap: 10px 8px !important; }
+html.wmd-marche-compact [id^="marketplace-auction-"] > a { width: 160px !important; padding: 6px 8px !important; }
+html.wmd-marche-compact [id^="marketplace-auction-"] > a > div > div:not(.overflow-hidden) span { white-space: nowrap; }
+html.wmd-marche-compact [id^="marketplace-auction-"] > a > div > div:not(.overflow-hidden) span.uppercase { font-size: 9px !important; }
+html.wmd-marche-compact [id^="marketplace-auction-"] > a > div { gap: 3px !important; align-items: stretch !important; }
+html.wmd-marche-compact [id^="marketplace-auction-"] .overflow-hidden.rounded-2xl,
+html.wmd-marche-compact [id^="marketplace-auction-"] p.truncate { display: none !important; }
+html.wmd-marche-compact [data-wmd-nom]::before {
+  content: attr(data-wmd-nom);
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--wmd-couleur-rarete, inherit);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+html.wmd-marche-compact [id^="marketplace-auction-"].wmd-bonne-affaire { width: 160px; }
+html.wmd-marche-compact [id^="marketplace-auction-"].wmd-bonne-affaire::after {
+  position: static; display: block; transform: none; margin-top: 3px;
+  white-space: normal; text-align: center; border-radius: 8px; font-size: 10px; line-height: 1.35;
+}
+
+/* 1.14 : « Seulement les enchères qui finissent dans 5 min » (case du panneau, page Marché). */
+[id^="marketplace-auction-"].wmd-fin-lointaine,
+[id^="marketplace-auction-"].wmd-trop-cher,
+[id^="marketplace-auction-"].wmd-au-dessus-moyenne,
+[id^="marketplace-auction-"].wmd-pas-encadree { display: none !important; } /* et « Seulement les mises jusqu'à … » */
+#wmd-panneau #wmd-montant-prixmax, #wmd-panneau #wmd-pct-sousmoyenne { width: 6em; padding: 1px 4px; background: #2b2b2b; color: #f0f0f0; border: 1px solid #666; border-radius: 4px; font: inherit; }
+
+/* =====================================================================
+   1.15
+   ===================================================================== */
+
+/* « 📋 » dans le titre du panneau (visible même réduit), à gauche du « + / - » */
+#wmd-panneau #wmd-raccourci-listes {
+  position: absolute;
+  top: 8px;
+  right: 46px;
+  width: 30px;
+  margin: 0;
+  padding: 2px;
+  background: #3a4f6f;
+}
+#wmd-panneau .wmd-titre { padding-right: 84px; }
+#wmd-panneau #wmd-mes-listes { background: #3a4f6f; }
+#wmd-panneau #wmd-mes-listes:hover, #wmd-panneau #wmd-raccourci-listes:hover { background: #4a6490; }
+
+/* Le menu « Mes listes » et la barre en haut de chaque liste */
+#wmd-panneau .wmd-barre-liste { display: flex; gap: 6px; justify-content: flex-end; margin: 2px 0 6px; }
+#wmd-panneau .wmd-barre-liste button.wmd-mini { background: #3a3d3a; }
+#wmd-panneau .wmd-barre-liste button.wmd-mini:hover { background: #4a4e4a; }
+#wmd-panneau button.wmd-choix-liste { text-align: left; background: #2f3a46; }
+#wmd-panneau button.wmd-choix-liste:hover:not(:disabled) { background: #3a5a7b; }
+#wmd-panneau button.wmd-choix-liste:disabled { opacity: 0.45; cursor: default; }
+#wmd-panneau button.wmd-choix-liste span { display: block; font-weight: bold; }
+#wmd-panneau button.wmd-choix-liste small { display: block; color: #b9c2cc; font-size: 11px; }
+
+/* Le bloc repliable « 🛒 Mises de cette page » (Marché) */
+#wmd-panneau details.wmd-prix-page > summary { cursor: pointer; font-weight: bold; }
+#wmd-panneau details.wmd-prix-page[open] > summary { margin-bottom: 4px; }
+
+/* Tu mènes (vert) / surenchéri (rouge) : panneau, encart de l'enchère */
+.wmd-statut-menez { color: #5fe39a; font-weight: bold; }
+.wmd-statut-surencheri { color: #ff7b72; font-weight: bold; }
+/* … et l'étiquette « 🔔 » des enchères suivies sur la liste du Marché */
+.wmd-enchere-suivie[data-wmd-statut="menez"]::before { background: #3bd38a; color: #0b2618; }
+.wmd-enchere-suivie[data-wmd-statut="surencheri"]::before { background: #ff6b5e; color: #2b0b08; }
+
+/* L'affichage allégé du Marché : un petit « A » doré qui tourne sur les cartes animées */
+html.wmd-marche-compact [id^="marketplace-auction-"] > a > div[data-wmd-anime="1"] { position: relative; }
+html.wmd-marche-compact [data-wmd-nom][data-wmd-anime="1"]::before { padding-right: 22px; }
+html.wmd-marche-compact [data-wmd-anime="1"]::after {
+  content: "A";
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 35% 30%, #fff6c4 0%, #ffd84d 45%, #c99a12 100%);
+  border: 1px solid #8a6a08;
+  box-shadow: 0 0 6px rgba(255, 216, 77, 0.85);
+  color: #4a3500;
+  font: 900 11px/1 Georgia, "Times New Roman", serif;
+  pointer-events: none;
+  animation: wmd-piece-tourne 2.2s linear infinite;
+}
+@keyframes wmd-piece-tourne {
+  from { transform: perspective(80px) rotateY(0deg); }
+  to   { transform: perspective(80px) rotateY(360deg); }
+}
+/* En affichage allégé, le « ✨ animée » en haut de l'image (cachée) ne sert plus */
+html.wmd-marche-compact [id^="marketplace-auction-"] .wmd-carte-animee:not(.wmd-bonne-affaire)::after,
+html.wmd-marche-compact [id^="marketplace-auction-"].wmd-carte-animee:not(.wmd-bonne-affaire)::after { display: none; }
+
+/* La fenêtre bleue « un ami a misé sur cette enchère » */
+.wmd-alerte-amis {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483646;
+  width: min(440px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 14px 16px 12px;
+  border-radius: 12px;
+  border: 2px solid #9cc8ff;
+  background: linear-gradient(160deg, #1f6fe0 0%, #164fb0 100%);
+  color: #fff;
+  font: 14px/1.45 system-ui, sans-serif;
+  box-shadow: 0 10px 30px rgba(10, 40, 110, 0.55);
+}
+.wmd-alerte-amis.wmd-alerte-entree { animation: wmd-alerte-entree 0.35s ease-out; }
+@keyframes wmd-alerte-entree {
+  from { opacity: 0; transform: translate(-50%, -14px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.wmd-alerte-amis .wmd-alerte-titre { font-weight: 800; font-size: 15px; padding-right: 28px; }
+.wmd-alerte-amis .wmd-alerte-carte { margin: 2px 0 6px; opacity: 0.9; font-style: italic; }
+.wmd-alerte-amis ul { margin: 6px 0; padding-left: 18px; }
+.wmd-alerte-amis li { margin: 4px 0; }
+.wmd-alerte-amis button {
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font: 12px/1.4 system-ui, sans-serif;
+}
+.wmd-alerte-amis .wmd-alerte-croix {
+  position: absolute; top: 8px; right: 8px; width: 26px; height: 26px;
+  background: rgba(255, 255, 255, 0.18); color: #fff; font-size: 14px;
+}
+.wmd-alerte-amis .wmd-alerte-ignorer { display: block; margin-top: 2px; padding: 2px 8px; background: rgba(255, 255, 255, 0.16); color: #e6f0ff; }
+.wmd-alerte-amis .wmd-alerte-pied { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.wmd-alerte-amis .wmd-alerte-ok { padding: 6px 14px; background: #fff; color: #164fb0; font-weight: 700; font-size: 13px; }
+.wmd-alerte-amis .wmd-alerte-lien { padding: 4px 8px; background: transparent; color: #dce9ff; text-decoration: underline; }
+.wmd-alerte-amis button:hover { filter: brightness(1.1); }
+
+/* Le filtre « Seulement les mises jusqu'à … » cache tout : l'encart à la place de la liste */
+.wmd-aide-prixmax {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #4aa3ff;
+  border-radius: 10px;
+  background: rgba(30, 90, 170, 0.18);
+  color: inherit;
+  font: 13px/1.45 system-ui, sans-serif;
+}
+.wmd-aide-prixmax .wmd-aide-texte { margin: 4px 0 8px; opacity: 0.9; }
+.wmd-aide-prixmax button {
+  margin: 0 6px 6px 0;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 6px;
+  background: #2f6f4f;
+  color: #fff;
+  font: 12px/1.4 system-ui, sans-serif;
+  cursor: pointer;
+}
+.wmd-aide-prixmax button:hover { background: #3b8a62; }
+.wmd-aide-prixmax button.wmd-aide-stop { background: #8a3b3b; }
+
+/* 1.16 : « 🛒 Voir au Marché » dans les fiches de cartes et sur la page d'une enchère */
+.wmd-prix-fiche .wmd-voir-marche {
+  clear: both;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0 0 6px;
+}
+.wmd-prix-fiche .wmd-voir-marche .wmd-voir-marche-bouton {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #2d5d7b;
+  color: #fff;
+  font: bold 13px/1.4 system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.wmd-prix-fiche .wmd-voir-marche .wmd-voir-marche-bouton:hover { background: #3a7399; }
+.wmd-prix-fiche .wmd-voir-marche .wmd-discret { margin: 0; }
+.wmd-prix-fiche .wmd-voir-marche a.wmd-lien-carte { color: inherit; text-decoration: underline; cursor: pointer; font-size: 12px; }
+
+/* 1.14 : les seuils des cadres du Marché, dans le panneau. */
+#wmd-panneau #wmd-seuils[hidden] { display: none; }
+#wmd-panneau #wmd-seuils { cursor: default; }
+#wmd-panneau .wmd-ligne-seuil { margin: 3px 0 0 8px; }
+#wmd-panneau .wmd-ligne-seuil input, #wmd-panneau .wmd-ligne-seuil select {
+  padding: 1px 4px; background: #2b2b2b; color: #f0f0f0; border: 1px solid #666; border-radius: 4px; font: inherit;
+}
+#wmd-panneau .wmd-ligne-seuil input { width: 5.5em; }
+#wmd-panneau .wmd-ligne-seuil select { width: auto !important; margin-left: 3px; }
+
+/* 1.16 : le sous-menu « ⚙️ Options du Marché » du panneau. */
+#wmd-panneau details.wmd-options-marche > summary { cursor: pointer; font-weight: bold; }
+#wmd-panneau details.wmd-options-marche[open] > summary { margin-bottom: 4px; }
+#wmd-panneau details.wmd-options-marche[hidden] { display: none; }
+#wmd-panneau details.wmd-options-marche > .wmd-case:last-child { margin-bottom: 0; }
+
+/* 1.16 : variations du prix sur les cartes encadrées (en bas à gauche : 1 semaine ; en bas à droite : 2 mois). */
+.wmd-tendance {
+  position: absolute;
+  bottom: -10px;
+  z-index: 40;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #1b1d1b;
+  color: #ffffff;
+  border: 1px solid var(--wmd-couleur-affaire, #e53935);
+  font: bold 11px/1.5 system-ui, sans-serif;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: help;
+}
+.wmd-tendance-gauche { left: 6px; }
+.wmd-tendance-droite { right: 6px; }
+.wmd-tendance[data-sens="hausse"] { color: #3bd38a; }
+.wmd-tendance[data-sens="baisse"] { color: #ff6b5e; }
