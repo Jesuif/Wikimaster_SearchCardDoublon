@@ -11,7 +11,7 @@
  *   ID_FICHIER  : l'identifiant de ton fichier (dans son lien, entre /d/ et /view) ;
  *   CODE_SECRET : un code de ton choix, à donner seulement aux personnes de confiance.
  */
-const ID_FICHIER = "1n2ojYDVpDaEd8wqOkljGMaqof__M-9EK";
+const ID_FICHIER = "remplace-moi-par-l-identifiant-du-fichier";
 const CODE_SECRET = "remplace-moi-par-un-code";
 
 // Ouvrir l'adresse dans un navigateur ne montre rien : tout passe par l'extension, en POST
