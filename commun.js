@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.16.0 - commun.js
+//  WikiMasters Doublons 1.17.5 (sans chargement automatique) - commun.js
 //  Nouveau en 1.3 : ce fichier est partagé par les trois parties de
 //  l'extension (content.js, background.js et la page des réglages).
 //  On y range ce qui doit être identique partout, pour ne l'écrire qu'une fois.
@@ -87,8 +87,19 @@ function ordreRarete(rarete) {
 }
 
 // L'inverse de lettreRarete : "UR" donne "ultra_rare".
+// 1.17.1 : les cartes « L+ » (shiny) sont des L avec un autre visuel : le badge « L✦ shiny » ou « L+ » donne aussi "legendaire".
 function rareteDepuisLettre(lettre) {
-  return Object.keys(RARETES).find(rarete => RARETES[rarete].lettre === lettre) || null;
+  const propre = String(lettre == null ? "" : lettre).replace(/shiny|[✦+*]/gi, "").replace(/\s+/g, "");
+  if (!propre) return null;
+  return Object.keys(RARETES).find(rarete => RARETES[rarete].lettre === propre) || null;
+}
+
+// 1.17.1 : un petit badge de rareté. Avant : seulement un élément sans enfant (« L »).
+// Les cartes shiny ont « L<span>✦</span><span> shiny</span> » : on accepte aussi un texte court fait de quelques spans.
+function estPetitBadge(element) {
+  if (element.children.length === 0) return true;
+  return element.textContent.trim().length <= 14
+    && [...element.children].every(enfant => enfant.tagName === "SPAN" && enfant.children.length === 0);
 }
 
 // Combien de paquets as-tu (à peu près) à un moment donné ?

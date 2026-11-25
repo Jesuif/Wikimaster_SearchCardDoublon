@@ -42,6 +42,12 @@
     .liste-amis label { margin: 2px 0; display: flex; align-items: center; gap: 6px; }
     .liste-amis .ignore { color: #8a3b3b; }
     .liste-amis button.petit { padding: 0 6px; font-size: 12px; }
+    /* 1.17 : le sommaire, collé en haut quand on fait défiler */
+    nav.sommaire { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0 -16px 16px; padding: 8px 16px;
+      background: rgba(244, 245, 244, 0.96); border-bottom: 1px solid #d9dcd9; }
+    nav.sommaire a { padding: 2px 10px; border-radius: 999px; background: #e3ebe6; color: #1f4d36; text-decoration: none; font-size: 13px; }
+    nav.sommaire a:hover { background: #2f6f4f; color: #fff; }
+    section { scroll-margin-top: 56px; }
   </style>
 </head>
 <body>
@@ -50,7 +56,20 @@
   <p class="discret">Extension non officielle, sans lien avec WikiMasters. Les réglages sont enregistrés tout seuls.
     Chaque fonction peut être activée ou coupée.</p>
 
-  <section>
+  <!-- 1.17 : un sommaire, pour aller directement à une partie des réglages -->
+  <nav class="sommaire" aria-label="Sommaire des réglages">
+    <a href="#section-fonctions">Fonctions</a>
+    <a href="#section-etiquettes">Étiquettes</a>
+    <a href="#section-lecture">Lecture des pages</a>
+    <a href="#section-paquets">Paquets</a>
+    <a href="#section-notifications">Notifications</a>
+    <a href="#section-encheres">Enchères</a>
+    <a href="#section-amis">Amis</a>
+    <a href="#section-partage">Prix partagés</a>
+    <a href="#section-memoire">Mémoire</a>
+  </nav>
+
+  <section id="section-fonctions">
     <h2>Fonctions de l'extension</h2>
     <label><input type="checkbox" id="surlignerAnimees"> Entourer en doré les cartes animées (image GIF) sur le site</label>
     <label><input type="checkbox" id="etiquettes"> Étiquettes suggérées : un badge sur chaque carte de ta Collection, et le champ « Ajouter une étiquette » pré-rempli quand tu ouvres une carte</label>
@@ -59,8 +78,9 @@
     <label><input type="checkbox" id="manquantes"> Cartes manquantes et pourcentage par rareté (page « Toutes les cartes »)</label>
     <label><input type="checkbox" id="echanges"> Aide aux échanges : copie pour Discord et comparaison avec un ami</label>
     <label><input type="checkbox" id="marche"> Marché : relever les « mises actuelles » (jamais les mises de départ) pour estimer la valeur de mes cartes</label>
-    <p class="discret">Les cadres des bonnes affaires du Marché (en % ou en wikibidous sous l'estimation) se règlent
-      directement dans le panneau de l'extension, sur la page Marché.</p>
+    <p class="discret">Les options du Marché se règlent directement dans le panneau de l'extension, sur la page Marché,
+      sous « ⚙️ Options du Marché » : cadres des bonnes affaires (en % ou en wikibidous), « + / ++ / +++ », prix gonflés 🎈,
+      filtres, et une légende de tous les cadres et icônes.</p>
     <label><input type="checkbox" id="animeesJeu"> Bouton « Trouver les cartes animées du jeu » sur la page « Toutes les cartes »</label>
   </section>
 
@@ -78,7 +98,7 @@
     <button id="etiquettes-defaut" type="button" class="secondaire">Remettre les étiquettes de départ</button>
   </section>
 
-  <section>
+  <section id="section-lecture">
     <h2>Lecture des pages (doublons, cartes manquantes, cartes animées)</h2>
     <label>Si une page tarde à répondre, réessayer pendant
       <select id="patienceMinutes">
@@ -98,7 +118,7 @@
       Choisis plutôt une rareté avec les filtres du site (L, UR, SR…) : le jeu compte des millions de cartes communes.</p>
   </section>
 
-  <section>
+  <section id="section-paquets">
     <h2>Paquets</h2>
     <p>L'extension calcule l'heure à laquelle ton stock sera plein chaque fois que tu passes sur la page
       <b>Paquets</b> du site. Si tu ouvres des paquets ailleurs (sur ton téléphone par exemple), repasse sur cette page
@@ -114,7 +134,7 @@
     </label>
   </section>
 
-  <section>
+  <section id="section-notifications">
     <h2>Notifications</h2>
     <label><input type="checkbox" id="notifPC"> Sur ce PC (le navigateur doit être ouvert)</label>
     <p class="discret">Prochaine notification sur ce PC : <span id="etat-pc">aucune</span></p>
@@ -158,7 +178,7 @@
     </details>
   </section>
 
-  <section>
+  <section id="section-encheres">
     <h2>Enchères : être prévenu avant la fin</h2>
     <label><input type="checkbox" id="encheres"> Me prévenir avant la fin des enchères que je suis</label>
     <div id="bloc-encheres">
@@ -221,7 +241,7 @@
     <p class="discret" id="partage-etat"></p>
   </section>
 
-  <section>
+  <section id="section-memoire">
     <h2>Ce que l'extension garde en mémoire</h2>
     <p class="discret">Tout reste dans ton navigateur : rien n'est envoyé à l'auteur ni à WikiMasters (sauf, si tu l'utilises, le fichier des prix partagés, envoyé au script Google réglé plus haut).</p>
     <p>Dernière lecture complète de ta collection : <span id="memoire-collection">aucune</span></p>

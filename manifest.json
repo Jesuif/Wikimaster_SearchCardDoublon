@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "WikiMasters Doublons",
-  "version": "1.16.0",
+  "name": "WikiMasters Doublons (sans chargement auto)",
+  "version": "1.17.5",
   "description": "Doublons, cartes animées et manquantes, échanges, alertes d'enchères et amis sur WikiMasters. Compte tes paquets et te prévient.",
   "icons": {
     "128": "icone-128.png"
@@ -9,7 +9,8 @@
   "permissions": [
     "storage",
     "alarms",
-    "notifications"
+    "notifications",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://script.google.com/*",
@@ -19,7 +20,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "WikiMasters Doublons",
+    "default_title": "WikiMasters Doublons (sans chargement auto)",
     "default_icon": {
       "128": "icone-128.png"
     }

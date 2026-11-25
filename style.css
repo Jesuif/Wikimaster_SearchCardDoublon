@@ -39,19 +39,11 @@
 
 #wmd-panneau button:hover { background: #3b8a62; }
 #wmd-panneau #wmd-stop { background: #8a3b3b; }
-#wmd-panneau #wmd-reduire {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 28px;
-  margin: 0;
-  padding: 2px;
-  background: #3a3d3a;
-}
 
-/* Panneau réduit : on cache tout sauf le titre et le bouton "-" */
+
+/* Panneau réduit : on cache tout sauf le titre (et ses boutons) */
 /* 1.9 : les étiquettes de la carte ouverte (#wmd-suggestions) restent visibles même panneau réduit */
-#wmd-panneau.wmd-reduit > *:not(.wmd-titre):not(#wmd-reduire):not(#wmd-suggestions) { display: none; }
+#wmd-panneau.wmd-reduit > *:not(.wmd-titre):not(#wmd-suggestions) { display: none; }
 
 /* Nouveau en 1.3 : un bouton caché (attribut hidden) reste caché malgré « display: block » plus haut */
 #wmd-panneau [hidden] { display: none !important; }
@@ -157,12 +149,15 @@
   position: sticky;
   top: -12px;                 /* le panneau a 12 px de marge intérieure : on remonte jusqu'au bord */
   z-index: 5;
+  display: flex;              /* 1.17 : le nom à gauche, les petits boutons 📋 ⚙️ − à droite */
+  align-items: center;
+  gap: 8px;
   margin: -12px -12px 8px;
-  padding: 12px 48px 8px 12px;
+  padding: 10px 10px 8px 12px;
   background: #1b1d1b;
   border-bottom: 1px solid #3a3d3a;
+  cursor: default;
 }
-#wmd-panneau .wmd-titre #wmd-reduire { top: 8px; right: 12px; }
 #wmd-panneau.wmd-reduit .wmd-titre { margin-bottom: -12px; border-bottom: none; }
 
 /* Nouveau en 1.5 : mes souhaits chez mes amis */
@@ -418,26 +413,30 @@ html.wmd-marche-compact [id^="marketplace-auction-"].wmd-bonne-affaire::after {
 [id^="marketplace-auction-"].wmd-fin-lointaine,
 [id^="marketplace-auction-"].wmd-trop-cher,
 [id^="marketplace-auction-"].wmd-au-dessus-moyenne,
-[id^="marketplace-auction-"].wmd-pas-encadree { display: none !important; } /* et « Seulement les mises jusqu'à … » */
-#wmd-panneau #wmd-montant-prixmax, #wmd-panneau #wmd-pct-sousmoyenne { width: 6em; padding: 1px 4px; background: #2b2b2b; color: #f0f0f0; border: 1px solid #666; border-radius: 4px; font: inherit; }
+[id^="marketplace-auction-"].wmd-pas-encadree,
+[id^="marketplace-auction-"].wmd-autre-rarete { display: none !important; } /* et « Seulement les mises jusqu'à … » */
+#wmd-panneau #wmd-montant-prixmax, #wmd-panneau #wmd-pct-sousmoyenne, #wmd-panneau #wmd-minutes-bientot { width: 6em; padding: 1px 4px; background: #2b2b2b; color: #f0f0f0; border: 1px solid #666; border-radius: 4px; font: inherit; }
 
 /* =====================================================================
    1.15
    ===================================================================== */
 
-/* « 📋 » dans le titre du panneau (visible même réduit), à gauche du « + / - » */
-#wmd-panneau #wmd-raccourci-listes {
-  position: absolute;
-  top: 8px;
-  right: 46px;
+/* 1.17 : la barre de titre : 📋 mes listes, ⚙️ réglages, − / + (visibles même panneau réduit) */
+#wmd-panneau .wmd-titre-texte { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#wmd-panneau.wmd-reduit .wmd-titre-texte { cursor: pointer; }
+#wmd-panneau .wmd-titre-boutons { display: flex; gap: 4px; flex: 0 0 auto; }
+#wmd-panneau .wmd-titre-boutons button {
   width: 30px;
+  height: 26px;
   margin: 0;
-  padding: 2px;
-  background: #3a4f6f;
+  padding: 0;
+  background: #3a3d3a;
+  font-size: 14px;
+  line-height: 26px;
 }
-#wmd-panneau .wmd-titre { padding-right: 84px; }
-#wmd-panneau #wmd-mes-listes { background: #3a4f6f; }
-#wmd-panneau #wmd-mes-listes:hover, #wmd-panneau #wmd-raccourci-listes:hover { background: #4a6490; }
+#wmd-panneau .wmd-titre-boutons button:hover { background: #4a4e4a; }
+#wmd-panneau #wmd-raccourci-listes, #wmd-panneau .wmd-titre-boutons #wmd-reglages { background: #3a4f6f; }
+#wmd-panneau #wmd-raccourci-listes:hover, #wmd-panneau .wmd-titre-boutons #wmd-reglages:hover { background: #4a6490; }
 
 /* Le menu « Mes listes » et la barre en haut de chaque liste */
 #wmd-panneau .wmd-barre-liste { display: flex; gap: 6px; justify-content: flex-end; margin: 2px 0 6px; }
@@ -617,3 +616,180 @@ html.wmd-marche-compact [id^="marketplace-auction-"].wmd-carte-animee:not(.wmd-b
 .wmd-tendance-droite { right: 6px; }
 .wmd-tendance[data-sens="hausse"] { color: #3bd38a; }
 .wmd-tendance[data-sens="baisse"] { color: #ff6b5e; }
+
+/* « 🛒 Chercher au Marché » sous chaque carte de la liste de souhaits de la guilde */
+.wmd-souhait-marche {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+}
+.wmd-souhait-marche .wmd-souhait-marche-bouton {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 8px;
+  background: #2d5d7b;
+  color: #fff;
+  font: bold 12px/1.4 system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.wmd-souhait-marche .wmd-souhait-marche-bouton:hover { background: #3a7399; }
+.wmd-souhait-marche .wmd-souhait-marche-details { font: 10px/1.3 system-ui, sans-serif; opacity: 0.6; }
+.wmd-souhait-marche a.wmd-lien-carte { color: inherit; text-decoration: underline; cursor: pointer; }
+
+/* 1.16 : « + / ++ / +++ » en haut à droite des cartes du Marché (écart entre la mise et le prix moyen du site). */
+[id^="marketplace-auction-"].wmd-avec-ecart { position: relative; }
+.wmd-ecart {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 40;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #1b1d1b;
+  border: 1px solid currentColor;
+  font: bold 13px/1.4 system-ui, sans-serif;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  cursor: help;
+}
+.wmd-ecart[data-sens="moins-cher"] { color: #3bd38a; }
+.wmd-ecart[data-sens="plus-cher"] { color: #ff6b5e; }
+html.wmd-marche-compact .wmd-ecart { top: -9px; right: 6px; font-size: 11px; }
+#wmd-panneau .wmd-ligne-ecarts { margin: 2px 0 0 20px; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+#wmd-panneau .wmd-ligne-ecarts input { flex: 1 1 0; width: auto; max-width: 5.4em; min-width: 0; padding: 1px 4px; background: #2b2b2b; color: #f0f0f0; border: 1px solid #666; border-radius: 4px; font: inherit; }
+
+/* =====================================================================
+   1.17 : PANNEAU RANGÉ, ICÔNES DES CADRES, PRIX GONFLÉS, CHARGEMENT AUTOMATIQUE
+   ===================================================================== */
+
+/* Le statut, en haut du panneau : il dit ce qui se passe */
+#wmd-panneau #wmd-statut { margin: 0 0 8px; border-left: 3px solid #3b8a62; }
+#wmd-panneau .wmd-taches { display: flex; gap: 6px; }
+#wmd-panneau .wmd-taches button { margin: 0 0 6px; }
+
+/* Les groupes de boutons (« Sur cette page », « Prix », « Fichiers », « Amis et enchères ») */
+#wmd-panneau .wmd-groupe { margin: 8px 0; }
+#wmd-panneau .wmd-groupe-titre {
+  margin: 0 0 2px;
+  color: #a9ada9;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+#wmd-panneau .wmd-groupe button { margin: 3px 0; padding: 5px 8px; text-align: left; }
+#wmd-panneau .wmd-groupe[hidden], #wmd-panneau .wmd-sous-menu[hidden] { display: none; }
+
+/* Les sous-menus des options du Marché */
+#wmd-panneau details.wmd-sous-menu {
+  margin: 4px 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: #1f211f;
+  border: 1px solid #333633;
+}
+#wmd-panneau details.wmd-sous-menu > summary { cursor: pointer; font-weight: 600; font-size: 12px; color: #d8dcd8; }
+#wmd-panneau details.wmd-sous-menu[open] > summary { margin-bottom: 4px; }
+#wmd-panneau .wmd-case select, #wmd-panneau input.wmd-petit-nombre, #wmd-panneau #wmd-ratio-pic {
+  padding: 1px 4px; background: #2b2b2b; color: #f0f0f0; border: 1px solid #666; border-radius: 4px; font: inherit;
+}
+#wmd-panneau input.wmd-petit-nombre { width: 4.5em; }
+#wmd-panneau #wmd-ratio-pic { width: 3.6em; }
+
+/* Le chargement automatique */
+#wmd-panneau #wmd-auto.wmd-auto-actif { border-color: #3b8a62; box-shadow: inset 3px 0 0 #3bd38a; }
+#wmd-panneau #wmd-auto.wmd-auto-actif > summary::after { content: " · en marche"; color: #3bd38a; font-weight: normal; }
+#wmd-panneau .wmd-auto-principal { font-weight: bold; }
+#wmd-panneau .wmd-auto-raretes label { display: inline-block; margin: 0 3px 0 0; cursor: pointer; white-space: nowrap; }
+#wmd-panneau .wmd-auto-etat {
+  margin: 6px 0 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: #262826;
+  font-size: 12px;
+}
+
+/* La légende */
+#wmd-panneau .wmd-legende-ligne { display: flex; gap: 8px; align-items: baseline; margin: 4px 0; font-size: 12px; }
+#wmd-panneau .wmd-legende-exemple {
+  flex: 0 0 74px;
+  box-sizing: border-box;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #2b2d2b;
+  text-align: center;
+  font-weight: bold;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#wmd-panneau .wmd-legende-exemple.wmd-leg-jaune { background: linear-gradient(90deg, hsl(50, 95%, 52%), hsl(12, 95%, 52%)); color: #1b1d1b; }
+#wmd-panneau .wmd-legende-exemple.wmd-leg-rouge { background: hsl(0, 90%, 52%); color: #fff; }
+/* 1.17 : les seuils + / ++ / +++ (++ = cadre jaune, +++ = cadre rouge) */
+#wmd-panneau .wmd-titre-ecarts { margin-bottom: 2px; }
+#wmd-panneau .wmd-ligne-ecarts { margin-left: 0; }
+#wmd-panneau .wmd-pastille-ecart { flex: 0 0 auto; padding: 0 5px; border-radius: 999px; background: #2b2d2b; border: 1px solid #3bd38a; color: #3bd38a; font-weight: bold; font-size: 11px; cursor: help; }
+#wmd-panneau .wmd-pastille-ecart.wmd-pastille-jaune { background: linear-gradient(90deg, hsl(50, 95%, 52%), hsl(25, 95%, 52%)); border-color: hsl(40, 95%, 52%); color: #1b1d1b; }
+#wmd-panneau .wmd-pastille-ecart.wmd-pastille-rouge { background: hsl(0, 90%, 52%); border-color: hsl(0, 90%, 52%); color: #fff; }
+#wmd-panneau .wmd-legende-exemple.wmd-leg-max { height: 14px; background: hsl(212, 95%, 56%); }
+
+/* Les icônes d'alerte des cartes du Marché (🕒 vieux prix, ⚠ prix douteux, 🎈 prix gonflé), à gauche de la carte */
+.wmd-icones {
+  position: absolute;
+  top: 18px;
+  left: -9px;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: auto;
+}
+.wmd-icone {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1b1d1b;
+  border: 1px solid #666;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.55);
+  font: bold 12px/1 system-ui, sans-serif;
+  color: #ffd84d;
+  cursor: help;
+}
+.wmd-icone-vieux { border-color: #b9c2cc; }
+.wmd-icone-attention { border-color: #ffffff; color: #ffffff; }
+.wmd-icone-pic { border-color: #ff6b5e; background: #3a1512; animation: wmd-pic 1.6s ease-in-out infinite; }
+@keyframes wmd-pic { 50% { box-shadow: 0 0 10px 2px rgba(255, 107, 94, 0.75); } }
+[id^="marketplace-auction-"]:has(> .wmd-icones) { position: relative; }
+html.wmd-marche-compact .wmd-icones { top: 10px; left: -8px; }
+html.wmd-marche-compact .wmd-icone { width: 18px; height: 18px; font-size: 10px; }
+
+/* L'étiquette du cadre : plus courte, elle tient dans la largeur de la carte */
+.wmd-bonne-affaire::after { max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); }
+
+/* L'avertissement « prix peut-être gonflé » dans la fiche d'une carte et sur la page d'une enchère */
+.wmd-alerte-pic {
+  clear: both;
+  margin: 6px 0 2px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 107, 94, 0.6);
+  background: rgba(255, 107, 94, 0.14);
+  color: #ffb3ab;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* 1.17.3 : pastille rouge à côté de la croix de la fiche : l'historique des prix de la carte est enregistré. */
+.wmd-pastille-historique {
+  position: absolute; top: 50%; right: calc(100% + 4px); transform: translateY(-50%);
+  width: 10px; height: 10px; border-radius: 50%; background: #e5252a;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 6px rgba(229, 37, 42, 0.8);
+  pointer-events: none;
+}

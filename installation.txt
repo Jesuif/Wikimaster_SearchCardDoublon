@@ -1,0 +1,50 @@
+INSTALLER WIKIMASTERS DOUBLONS DANS GOOGLE CHROME
+================================================
+
+Il faut Google Chrome version 111 ou plus récente.
+
+1. Ranger le dossier
+   Mettez le dossier de l'extension (celui qui contient directement
+   le fichier manifest.json) à un endroit où il restera.
+   Si vous le supprimez ou le déplacez, l'extension ne marche plus.
+
+2. Ouvrir la page des extensions
+   Dans la barre d'adresse de Chrome, tapez : chrome://extensions
+   puis appuyez sur Entrée.
+
+3. Activer le mode développeur
+   En haut à droite de la page, activez l'interrupteur « Mode développeur ».
+
+4. Charger l'extension
+   Cliquez sur « Charger l'extension non empaquetée » (en haut à gauche)
+   et choisissez le dossier qui contient manifest.json.
+   « WikiMasters Doublons » apparaît dans la liste.
+
+5. Épingler l'icône (pour voir le nombre de paquets)
+   Cliquez sur l'icône des extensions (la pièce de puzzle) en haut à droite,
+   puis sur la punaise à côté de « WikiMasters Doublons ».
+
+6. Autoriser les notifications sur le PC
+   Dans Windows : Paramètres > Système > Notifications,
+   vérifiez que Google Chrome a le droit d'afficher des notifications.
+
+7. Ouvrir le site
+   Allez sur https://www.wiki-masters.com (ou rechargez la page avec F5
+   si elle était déjà ouverte).
+
+Les réglages : clic droit sur l'icône de l'extension > « Options ».
+
+
+METTRE À JOUR
+-------------
+1. Remplacez les fichiers du dossier par ceux de la nouvelle version.
+2. Dans chrome://extensions, cliquez sur la flèche ronde (Recharger)
+   de « WikiMasters Doublons ».
+3. Rechargez les onglets WikiMasters (F5).
+Vos réglages et votre historique sont gardés.
+
+
+DÉSINSTALLER
+------------
+Dans chrome://extensions, cliquez sur « Supprimer » sous
+« WikiMasters Doublons », puis supprimez le dossier.

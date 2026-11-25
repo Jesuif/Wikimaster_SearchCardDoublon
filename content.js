@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.16.0 - content.js
+//  WikiMasters Doublons 1.17.5 (sans chargement automatique) - content.js
 //  Le navigateur injecte ce script dans chaque page de wiki-masters.com,
 //  juste après commun.js (qui fournit api, RARETES, lireReglages...).
 //  Nouveau en 1.3 : statistiques, historique, cartes manquantes et aide
@@ -54,6 +54,34 @@ const CONFIG = {
 // Attendre un certain temps. S'utilise avec "await" : await pause(2000);
 function pause(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// 1.17 : MODIFIER LA MÉMOIRE DES PRIX CHACUN SON TOUR.
+// Plusieurs fonctions lisent la mémoire « marche » (et « tendances »), la modifient, puis la réécrivent
+// en entier : le relevé du Marché toutes les 3 s, le prix moyen d'une fiche, l'import, « ☁️ Mettre à jour
+// les prix »… et parfois dans deux onglets à la fois. Avant, l'une pouvait réécrire une copie déjà
+// dépassée et effacer ce que l'autre venait d'ajouter : des cartes apparaissaient encadrées (nouveaux prix)
+// puis plus rien (anciens prix remis). Maintenant, chaque modification attend que la précédente soit finie :
+// dans cet onglet (une file d'attente) et entre les onglets du site (un verrou du navigateur, s'il existe).
+// "tache" doit relire la mémoire elle-même ; elle ne doit jamais rappeler modifierMemoire (blocage).
+let fileMemoire = Promise.resolve();
+function modifierMemoire(tache) {
+  const executer = () => {
+    let promesse = null;
+    const une = () => (promesse = promesse || Promise.resolve().then(tache));
+    let verrous = null;
+    try { verrous = navigator.locks && typeof navigator.locks.request === "function" ? navigator.locks : null; } catch (erreur) { verrous = null; }
+    if (!verrous) return une();
+    try {
+      // Si le verrou ne peut pas appeler notre fonction (Firefox, par exemple), elle tourne quand même, une seule fois.
+      return Promise.resolve(verrous.request("wmd-memoire-prix", () => une())).then(() => une(), () => une());
+    } catch (erreur) {
+      return une();
+    }
+  };
+  const resultat = fileMemoire.then(executer, executer);
+  fileMemoire = resultat.catch(() => {});
+  return resultat;
 }
 
 // Crée un élément HTML avec son texte et sa classe (sans innerHTML, comme le demande Mozilla).
@@ -221,6 +249,113 @@ api.storage.onChanged.addListener(changements => {
 // Nouveau en 1.5.2 : le panneau s'ouvre RÉDUIT. Il ne s'agrandit que si tu cliques sur « + ».
 // (Si le site efface le panneau et qu'il est recréé, il garde l'état choisi sur cette page.)
 let panneauOuvert = false;
+// 1.17 : les sous-menus des options du Marché ouverts ou fermés (ton choix est gardé).
+let sousMenusOuverts = {};
+api.storage.local.get("sousMenusOuverts").then(({ sousMenusOuverts: valeur }) => {
+  sousMenusOuverts = valeur && typeof valeur === "object" ? valeur : {};
+  for (const [id, ouvert] of Object.entries(sousMenusOuverts)) {
+    const bloc = document.getElementById(id);
+    if (bloc && bloc.tagName === "DETAILS") bloc.open = Boolean(ouvert);
+  }
+}).catch(() => {});
+
+// 1.17 : le sous-menu « 🤖 Chargement automatique » (voir boucleAutoMarche).
+function construireAutoMarche(bloc) {
+  const ligne = (...enfants) => {
+    const div = creer("label", undefined, "wmd-case");
+    div.append(...enfants);
+    bloc.appendChild(div);
+    return div;
+  };
+  const caseACocher = (id, quandChange) => {
+    const c = creer("input");
+    c.type = "checkbox";
+    c.id = id;
+    c.addEventListener("change", () => quandChange(c.checked));
+    return c;
+  };
+  const nombre = (id, min, quandChange) => {
+    const n = creer("input");
+    n.type = "number";
+    n.min = String(min);
+    n.step = "1";
+    n.id = id;
+    n.className = "wmd-petit-nombre";
+    n.addEventListener("change", () => quandChange(Math.round(Number(n.value))));
+    return n;
+  };
+  const actif = caseACocher("wmd-auto-actif", coche => {
+    enregistrerAutoMarche({ actif: coche });
+    afficherStatut(coche ? "🤖 Chargement automatique lancé (onglet « Parcourir » du Marché)." : "🤖 Chargement automatique arrêté.");
+  });
+  const principal = ligne(actif, " Charger la suite toute seule (toutes les 2 à 3 s, au hasard)");
+  principal.classList.add("wmd-auto-principal");
+  const tri = creer("select");
+  tri.id = "wmd-auto-tri";
+  for (const [valeur, texte] of TRIS_MARCHE) {
+    const option = creer("option", texte);
+    option.value = valeur;
+    tri.appendChild(option);
+  }
+  tri.addEventListener("change", () => enregistrerAutoMarche({ tri: tri.value }));
+  ligne("Tri : ", tri);
+  const raretes = creer("div", undefined, "wmd-case wmd-auto-raretes");
+  raretes.appendChild(creer("span", "Raretés : "));
+  for (const r of Object.keys(RARETES)) {
+    const etiquette = creer("label", undefined, `wmd-${r}`);
+    const c = caseACocher(`wmd-auto-rarete-${r}`, () => {
+      const choisies = Object.keys(RARETES).filter(x => { const e = document.getElementById(`wmd-auto-rarete-${x}`); return e && e.checked; });
+      enregistrerAutoMarche({ raretes: choisies });
+    });
+    etiquette.append(c, " " + lettreRarete(r));
+    etiquette.title = RARETES[r].nom;
+    raretes.appendChild(etiquette);
+  }
+  raretes.appendChild(creer("div", "Aucune cochée = toutes. Une seule : le filtre du site. Plusieurs : les autres sont cachées.", "wmd-discret"));
+  bloc.appendChild(raretes);
+  ligne("Au plus ", nombre("wmd-auto-max", 1, n => enregistrerAutoMarche({ maxChargements: n })), " chargements, puis on s'arrête");
+  const actualiser = caseACocher("wmd-auto-actualiser", coche => enregistrerAutoMarche({ actualiser: coche }));
+  const minutes = nombre("wmd-auto-minutes", 1, n => enregistrerAutoMarche({ minutes: n, actualiser: true }));
+  ligne(actualiser, " Recharger la page toutes les ", minutes, " min (repart de zéro)");
+  // 1.17 : « ☁️ Mettre à jour les prix partagés » tout seul, toutes les X minutes (5 au minimum).
+  const partage = caseACocher("wmd-auto-partage", coche => enregistrerAutoMarche({ majPartage: coche }));
+  const minutesPartage = nombre("wmd-auto-minutes-partage", 5, n => enregistrerAutoMarche({ minutesPartage: n, majPartage: true }));
+  const lignePartage = ligne(partage, " ☁️ Mettre à jour les prix partagés toutes les ", minutesPartage, " min");
+  lignePartage.title = "Comme le bouton « ☁️ Mettre à jour les prix partagés » : lit le fichier commun, garde la donnée la plus récente, "
+    + "puis le renvoie complété de tes prix. Il faut que le fichier partagé soit réglé dans les réglages.";
+  const etat = creer("div", "Arrêté.", "wmd-auto-etat");
+  etat.id = "wmd-auto-etat";
+  bloc.appendChild(etat);
+  bloc.appendChild(creer("div", "⚠ Chaque chargement est une requête au site, comme un clic de ta part : "
+    + "c'est de l'automatisation, à utiliser avec modération. Pause quand une fiche est ouverte ou que tu écris.", "wmd-discret"));
+  setTimeout(afficherReglageAuto, 0);
+}
+
+// 1.17 : la légende des cadres, badges et icônes que l'extension ajoute aux cartes.
+function construireLegende(bloc) {
+  const lignes = [
+    ["wmd-leg-jaune", "++", "Cadre jaune : mise sous le prix moyen du site d'au moins le seuil « ++ » ; il devient orangé, de plus en plus rouge, en s'approchant du seuil « +++ »."],
+    ["wmd-leg-rouge", "+++", "Cadre rouge : mise sous le prix moyen du site d'au moins le seuil « +++ » (la meilleure affaire)."],
+    ["wmd-leg-max", "", "Cadre bleu : mise sous le prix le plus haut vu au Marché (blanc + ⚠ : ce prix est douteux, ces cadres peuvent être masqués)."],
+    ["", "−40 %", "En haut du cadre : l'écart et le prix de référence. Survole la carte pour le détail."],
+    ["", "+ ++ +++", "En haut à droite : écart avec le prix moyen (vert = moins cher, rouge = plus cher)."],
+    ["", "↑ 12 %", "En bas : variation du prix sur 1 semaine (à gauche) et 2 mois (à droite)."],
+    ["", "🕒", "Prix de référence relevé il y a plus d'une semaine, ou sans date."],
+    ["", "⚠", "Prix le plus haut du Marché probablement trompeur (un prix moyen du site existe)."],
+    ["", "🎈", "Prix peut-être gonflé : une semaine de ventes bien plus chères que d'habitude, puis retour à la normale."],
+    ["", "✨ / A", "Carte animée (A doré en affichage allégé)."],
+    ["", "🔔", "Enchère suivie (vert : tu mènes, rouge : surenchéri)."],
+    ["", "$461", "Collection : prix moyen du site ; en bleu, le plus bas / le plus haut vus au Marché ; 🛒 = prix d'achat."]
+  ];
+  const liste = creer("div", undefined, "wmd-legende-liste");
+  for (const [classe, exemple, texte] of lignes) {
+    const ligne = creer("div", undefined, "wmd-legende-ligne");
+    const pastille = creer("span", exemple, "wmd-legende-exemple" + (classe ? " " + classe : ""));
+    ligne.append(pastille, creer("span", texte));
+    liste.appendChild(ligne);
+  }
+  bloc.appendChild(liste);
+}
 
 function creerPanneau() {
   if (document.getElementById("wmd-panneau")) return; // il existe déjà
@@ -228,60 +363,91 @@ function creerPanneau() {
   const panneau = creer("div");
   panneau.id = "wmd-panneau";
   if (!panneauOuvert) panneau.classList.add("wmd-reduit");
-  const titre = creer("div", "WikiMasters Doublons", "wmd-titre");
+  const titre = creer("div", undefined, "wmd-titre");
+  titre.appendChild(creer("span", "WikiMasters Doublons", "wmd-titre-texte"));
   panneau.appendChild(titre);
 
   // Crée un bouton et le branche sur sa fonction (comme un OnClick dans Unity).
-  const ajouterBouton = (id, texte, action) => {
+  // 1.17 : "parent" = le groupe du panneau où il est rangé.
+  const ajouterBouton = (id, texte, action, parent = panneau, aide = "") => {
     const bouton = creer("button", texte);
     bouton.id = id;
+    bouton.type = "button";
+    if (aide) bouton.title = aide;
     bouton.addEventListener("click", action);
-    panneau.appendChild(bouton);
+    parent.appendChild(bouton);
     return bouton;
   };
-  // Corrigé en 1.4.6 : le bouton « - » est rangé DANS le titre, qui reste collé en haut du panneau
-  // quand on fait défiler (avant, titre et bouton disparaissaient avec une longue liste).
-  const reduire = ajouterBouton("wmd-reduire", panneauOuvert ? "-" : "+", () => {
-    panneauOuvert = panneau.classList.toggle("wmd-reduit") === false;
-    reduire.textContent = panneauOuvert ? "-" : "+";
-  });
-  reduire.title = "Agrandir / réduire";
-  titre.appendChild(reduire);
+  // 1.17 : la barre de titre a trois petits boutons, visibles même panneau réduit :
+  // 📋 mes listes, ⚙️ réglages, − / + réduire.
+  const icones = creer("span", undefined, "wmd-titre-boutons");
+  titre.appendChild(icones);
   // 1.15 : « 📋 » ouvre le panneau sur tes listes (doublons, collection, cartes manquantes…), même réduit.
   const raccourciListes = ajouterBouton("wmd-raccourci-listes", "📋", () => {
     if (panneau.classList.contains("wmd-reduit")) reduire.click();
     afficherMesListes();
-  });
-  raccourciListes.title = "Mes listes : doublons, collection, cartes manquantes, cartes animées, enchères…";
-  titre.appendChild(raccourciListes);
-  ajouterBouton("wmd-stop", "Stop", () => arreter());
-  ajouterBouton("wmd-mes-listes", "📋 Mes listes (collection, doublons, manquantes…)", () => afficherMesListes()); // 1.15
-  ajouterBouton("wmd-reprendre", "Reprendre la lecture", () => reprendreLecture()); // nouveau en 1.8
-  ajouterBouton("wmd-doublons", "Trouver mes doublons", () => trouverMesDoublons());
-  ajouterBouton("wmd-manquantes", "Trouver mes cartes manquantes", () => trouverMesCartesManquantes());
-  // Nouveau en 1.8 : les cartes animées de tout le jeu (page « Toutes les cartes »).
-  ajouterBouton("wmd-animees-jeu", "✨ Trouver les cartes animées du jeu", () => trouverCartesAnimees());
-  ajouterBouton("wmd-animees-revoir", "✨ Revoir les cartes animées trouvées", () => afficherAnimeesJeu());
-  // Nouveau en 1.8 : les enchères suivies (alertes avant la fin).
-  ajouterBouton("wmd-encheres", "🔔 Mes enchères suivies", () => afficherEncheresSuivies());
-  ajouterBouton("wmd-csv", "Exporter en CSV (Excel)", () => exporterCSV());
-  // 1.7.4 : les boutons « Exporter en JSON », « Copier mes doublons pour Discord » et
-  // « Comparer avec un ami » sont retirés du panneau.
-  // Nouveau en 1.4 : le marché. Depuis la 1.4.3, les prix de la page s'affichent tout seuls
-  // (plus de bouton « Prix de cette page », et plus de parcours automatique).
-  ajouterBouton("wmd-estimer", "Estimer la valeur de mes cartes", () => estimerMesCartes());
-  ajouterBouton("wmd-maj-prix", "☁️ Mettre à jour les prix", () => mettreAJourPrixPartages()); // 1.14
-  ajouterBouton("wmd-prix-csv", "Exporter les prix du marché (CSV)", () => exporterPrixMarche());
-  ajouterBouton("wmd-importer", "📥 Importer un fichier CSV (collection ou prix)", () => choisirFichierImport()); // 1.10
-  // Nouveau en 1.5 : tes cartes souhaitées chez tes amis (bouton visible sur toutes les pages).
-  ajouterBouton("wmd-souhaits", "Chercher mes souhaits chez mes amis", () => chercherSouhaitsChezAmis());
-  ajouterBouton("wmd-souhaits-resultats", "Revoir les résultats (souhaits)", () => afficherResultatsSouhaits());
-  ajouterBouton("wmd-reglages", "Réglages et notifications", () => {
+  }, icones, "Mes listes : doublons, collection, cartes manquantes, cartes animées, enchères…");
+  ajouterBouton("wmd-reglages", "⚙️", () => {
     api.runtime.sendMessage({ type: "ouvrir-reglages" }).catch(() => {});
+  }, icones, "Réglages et notifications (nouvel onglet)");
+  // Corrigé en 1.4.6 : le bouton « - » est rangé DANS le titre, qui reste collé en haut du panneau.
+  const reduire = ajouterBouton("wmd-reduire", panneauOuvert ? "−" : "+", () => {
+    panneauOuvert = panneau.classList.toggle("wmd-reduit") === false;
+    reduire.textContent = panneauOuvert ? "−" : "+";
+  }, icones, "Agrandir / réduire le panneau");
+  // Un clic sur le titre (panneau réduit) l'agrandit aussi.
+  titre.addEventListener("click", evenement => {
+    if (evenement.target === titre || evenement.target.classList.contains("wmd-titre-texte")) reduire.click();
   });
+  void raccourciListes;
 
-  // 1.16 : toutes les options du Marché dans un sous-menu repliable (comme « 🛒 Mises de cette page »).
-  // Ouvert ou fermé : ton choix est gardé.
+  // 1.17 : le statut tout en haut (c'est lui qui dit ce qui se passe), puis Stop / Reprendre.
+  const statut = creer("div", "Prêt.");
+  statut.id = "wmd-statut";
+  panneau.appendChild(statut);
+  const taches = creer("div", undefined, "wmd-taches");
+  ajouterBouton("wmd-stop", "⏹ Stop", () => arreter(), taches);
+  ajouterBouton("wmd-reprendre", "▶ Reprendre la lecture", () => reprendreLecture(), taches); // nouveau en 1.8
+  panneau.appendChild(taches);
+  const suggestions = creer("div"); // 1.9 : les étiquettes de la carte ouverte (visibles même panneau réduit)
+  suggestions.id = "wmd-suggestions";
+  panneau.appendChild(suggestions);
+
+  // 1.17 : les boutons sont rangés par groupes ; un groupe sans bouton utile sur cette page est caché.
+  const groupe = (id, titreGroupe) => {
+    const bloc = creer("div", undefined, "wmd-groupe");
+    bloc.id = id;
+    bloc.appendChild(creer("div", titreGroupe, "wmd-groupe-titre"));
+    panneau.appendChild(bloc);
+    return bloc;
+  };
+  const gPage = groupe("wmd-groupe-page", "🔍 Sur cette page");
+  ajouterBouton("wmd-doublons", "Trouver mes doublons", () => trouverMesDoublons(), gPage, "Lit toute ta collection, page par page (ne change pas de page pendant ce temps)");
+  ajouterBouton("wmd-manquantes", "Trouver mes cartes manquantes", () => trouverMesCartesManquantes(), gPage, "Choisis d'abord une rareté avec les filtres du site");
+  // Nouveau en 1.8 : les cartes animées de tout le jeu (page « Toutes les cartes »).
+  ajouterBouton("wmd-animees-jeu", "✨ Trouver les cartes animées du jeu", () => trouverCartesAnimees(), gPage);
+  ajouterBouton("wmd-animees-revoir", "✨ Revoir les cartes animées trouvées", () => afficherAnimeesJeu(), gPage);
+  const gPrix = groupe("wmd-groupe-prix", "💰 Prix");
+  ajouterBouton("wmd-estimer", "Estimer la valeur de mes cartes", () => estimerMesCartes(), gPrix);
+  ajouterBouton("wmd-maj-prix", "☁️ Mettre à jour les prix partagés", () => mettreAJourPrixPartages(), gPrix,
+    "Lit le fichier des prix partagé, garde la donnée la plus récente, puis le renvoie complété"); // 1.14
+  ajouterBouton("wmd-prix-csv", "Exporter les prix du marché (CSV)", () => exporterPrixMarche(), gPrix);
+  const gFichiers = groupe("wmd-groupe-fichiers", "📁 Fichiers");
+  ajouterBouton("wmd-csv", "Exporter ma collection en CSV (Excel)", () => exporterCSV(), gFichiers);
+  ajouterBouton("wmd-importer", "📥 Importer un fichier CSV (collection ou prix)", () => choisirFichierImport(), gFichiers); // 1.10
+  const gAmis = groupe("wmd-groupe-amis", "👥 Amis et enchères");
+  // Nouveau en 1.5 : tes cartes souhaitées chez tes amis (bouton visible sur toutes les pages).
+  ajouterBouton("wmd-souhaits", "Chercher mes souhaits chez mes amis", () => chercherSouhaitsChezAmis(), gAmis,
+    "Ouvre la fenêtre d'échange de chaque ami : plusieurs requêtes par ami, à utiliser avec modération");
+  ajouterBouton("wmd-souhaits-resultats", "Revoir les résultats (souhaits)", () => afficherResultatsSouhaits(), gAmis);
+  // Nouveau en 1.8 : les enchères suivies (alertes avant la fin).
+  ajouterBouton("wmd-encheres", "🔔 Mes enchères suivies", () => afficherEncheresSuivies(), gAmis);
+  // 1.17.3 : remettre en vente les cartes invendues, au même prix de départ et pour la même durée.
+  if (REMISE_EN_VENTE) ajouterBouton("wmd-remise", "🔁 Remettre en vente les invendues", () => boutonRemiseEnVente(), gAmis,
+    "Même mise de départ, même durée. Se lance tout de suite (sans confirmation) et clique pour toi dans ta Collection ; recliquer arrête");
+
+  // 1.16 : toutes les options du Marché dans un sous-menu repliable. Ouvert ou fermé : ton choix est gardé.
+  // 1.17 : rangées en quatre sous-menus : cadres et repères, filtres, chargement automatique, légende.
   const optionsMarche = creer("details", undefined, "wmd-bloc wmd-options-marche");
   optionsMarche.id = "wmd-options-marche";
   optionsMarche.appendChild(creer("summary", "⚙️ Options du Marché"));
@@ -291,6 +457,21 @@ function creerPanneau() {
     api.storage.local.set({ optionsMarcheOuvertes: optionsMarche.open }).catch(() => {});
   });
   panneau.appendChild(optionsMarche);
+  const sousMenu = (id, titreSousMenu, ouvertParDefaut) => {
+    const bloc = creer("details", undefined, "wmd-sous-menu");
+    bloc.id = id;
+    bloc.appendChild(creer("summary", titreSousMenu));
+    bloc.open = id in sousMenusOuverts ? sousMenusOuverts[id] : ouvertParDefaut;
+    bloc.addEventListener("toggle", () => {
+      sousMenusOuverts[id] = bloc.open;
+      api.storage.local.set({ sousMenusOuverts: sousMenusOuverts }).catch(() => {});
+    });
+    optionsMarche.appendChild(bloc);
+    return bloc;
+  };
+  const reperes = sousMenu("wmd-om-reperes", "🖼 Cadres et repères sur les cartes", true);
+  const filtres = sousMenu("wmd-om-filtres", "🔎 Filtres (cacher des cartes)", false);
+  const legende = sousMenu("wmd-legende", "❔ Légende des cadres et icônes", false);
 
   // Nouveau en 1.7.4 : une case pour afficher ou cacher les prix min / max trouvés au Marché.
   const caseMinMax = creer("label", undefined, "wmd-case");
@@ -304,7 +485,7 @@ function creerPanneau() {
     rafraichirAffichagePrix();
   });
   caseMinMax.append(coche, document.createTextNode(" Afficher les prix min / max du Marché"));
-  optionsMarche.appendChild(caseMinMax);
+  reperes.appendChild(caseMinMax);
 
   // 1.13 : l'affichage allégé du Marché (seulement le nom, le prix et les cadres de l'extension).
   const caseCompact = creer("label", undefined, "wmd-case");
@@ -318,14 +499,15 @@ function creerPanneau() {
     appliquerMarcheCompact();
   });
   caseCompact.append(cocheCompact, document.createTextNode(" Affichage allégé du Marché (nom et prix)"));
-  optionsMarche.appendChild(caseCompact);
+  filtres.appendChild(caseCompact);
 
   // 1.14 : les seuils des cadres des bonnes affaires, réglés ici (avant : dans les réglages).
   // Pour chaque cadre : un nombre, et « % » ou « wikibidous » sous l'estimation.
   const seuils = creer("div", undefined, "wmd-case");
   seuils.id = "wmd-seuils";
-  seuils.appendChild(creer("div", "Cadres des bonnes affaires : mise au moins…"));
-  for (const [cadreDe, texte] of [["Moyenne", "sous le prix moyen (jaune → rouge)"], ["Max", "sous le plus haut du Marché (bleu)"]]) {
+  // 1.17 : le cadre jaune / rouge suit les seuils « ++ » / « +++ » (juste au-dessus) : il ne reste ici que le cadre bleu.
+  seuils.appendChild(creer("div", "Cadre bleu : mise au moins…"));
+  for (const [cadreDe, texte] of [["Max", "sous le plus haut vu au Marché"]]) {
     const ligne = creer("div", undefined, "wmd-ligne-seuil");
     const valeur = creer("input");
     valeur.type = "number";
@@ -347,7 +529,23 @@ function creerPanneau() {
     ligne.append(valeur, mode, document.createTextNode(" " + texte));
     seuils.appendChild(ligne);
   }
-  optionsMarche.appendChild(seuils);
+  // 1.17.1 : ne plus encadrer en blanc (cadre bleu dont le prix le plus haut est douteux, « ⚠ »).
+  const caseBlanc = creer("label", undefined, "wmd-ligne-seuil");
+  caseBlanc.id = "wmd-case-blanc";
+  const cocheBlanc = creer("input");
+  cocheBlanc.type = "checkbox";
+  cocheBlanc.checked = marcheSansBlanc;
+  cocheBlanc.addEventListener("change", () => {
+    marcheSansBlanc = cocheBlanc.checked;
+    api.storage.local.set({ marcheSansBlanc: cocheBlanc.checked }).catch(() => {});
+    versionPage++;
+    marquerBonnesAffaires();
+  });
+  caseBlanc.title = "Le cadre blanc (⚠) apparaît quand seul le prix le plus haut du Marché donne une bonne affaire, "
+    + "alors que le prix moyen du site dit le contraire : ce prix le plus haut est souvent trompeur.";
+  caseBlanc.append(cocheBlanc, document.createTextNode(" Masquer les cadres blancs (⚠ prix douteux)"));
+  seuils.appendChild(caseBlanc);
+  reperes.appendChild(seuils);
   setTimeout(afficherSeuilsPanneau, 0);
 
   // 1.16 : n'afficher que les enchères encadrées (bonnes affaires).
@@ -365,9 +563,77 @@ function creerPanneau() {
   const texteEncadrees = creer("span", " Seulement les enchères encadrées");
   texteEncadrees.id = "wmd-texte-encadrees";
   caseEncadrees.append(cocheEncadrees, texteEncadrees);
-  optionsMarche.appendChild(caseEncadrees);
+  filtres.appendChild(caseEncadrees);
 
-  // 1.14 : cacher les enchères qui ne finissent pas dans les 5 prochaines minutes.
+  // 1.16 : « + / ++ / +++ » en haut à droite des cartes, selon l'écart entre la mise et le prix moyen.
+  const caseEcarts = creer("div", undefined, "wmd-case");
+  caseEcarts.id = "wmd-case-ecarts";
+  const ligneCoche = creer("label");
+  const cocheEcarts = creer("input");
+  cocheEcarts.type = "checkbox";
+  cocheEcarts.checked = marcheEcarts.actif;
+  // 1.17 : ces seuils décident aussi des cadres : « ++ » sous le prix moyen = cadre JAUNE, « +++ » = cadre ROUGE.
+  const titreEcarts = creer("div", "Écart avec le prix moyen (wikibidous) :", "wmd-titre-ecarts");
+  ligneCoche.append(cocheEcarts, document.createTextNode(" Afficher + / ++ / +++ en haut à droite des cartes"));
+  const ligneSeuils = creer("div", undefined, "wmd-ligne-ecarts");
+  const champsEcarts = [0, 1, 2].map(i => {
+    const champ = creer("input");
+    champ.type = "number";
+    champ.min = "1";
+    champ.step = "50";
+    champ.id = `wmd-ecart-${i + 1}`;
+    champ.value = String(marcheEcarts.seuils[i]);
+    return champ;
+  });
+  const changerEcarts = () => {
+    const seuils = champsEcarts.map((champ, i) => {
+      const n = Math.round(Number(champ.value));
+      return n >= 1 ? n : ECARTS_PAR_DEFAUT[i];
+    });
+    marcheEcarts = { actif: cocheEcarts.checked, seuils: seuils };
+    afficherReglageEcarts();
+    api.storage.local.set({ marcheEcarts: marcheEcarts }).catch(() => {});
+    versionPage++;
+    marquerBonnesAffaires();
+  };
+  cocheEcarts.addEventListener("change", changerEcarts);
+  for (const champ of champsEcarts) champ.addEventListener("change", changerEcarts);
+  // Les trois montants sur une seule ligne (dans l'ordre +, ++, +++), chacun avec sa pastille.
+  const infos = ["+ : seulement le repère en haut à droite", "++ : cadre JAUNE si la mise est au moins autant sous le prix moyen",
+    "+++ : cadre ROUGE si la mise est au moins autant sous le prix moyen"];
+  champsEcarts.forEach((champ, i) => { champ.title = infos[i] + " (wikibidous)"; });
+  const pastille = (texte, classe, titre) => { const p = creer("span", texte, "wmd-pastille-ecart " + classe); p.title = titre; return p; };
+  ligneSeuils.append(pastille("+", "", infos[0]), champsEcarts[0], pastille("++", "wmd-pastille-jaune", infos[1]), champsEcarts[1],
+    pastille("+++", "wmd-pastille-rouge", infos[2]), champsEcarts[2]);
+  caseEcarts.append(titreEcarts, ligneSeuils, ligneCoche);
+  reperes.insertBefore(caseEcarts, seuils);
+
+  // 1.17 : signaler les prix peut-être gonflés artificiellement (🎈), à partir de « × N » le prix habituel.
+  const casePic = creer("label", undefined, "wmd-case");
+  casePic.id = "wmd-case-pic";
+  const cochePic = creer("input");
+  cochePic.type = "checkbox";
+  cochePic.checked = reglagePic.actif;
+  const ratioPic = creer("input");
+  ratioPic.type = "number";
+  ratioPic.min = String(PIC_MINIMUM);
+  ratioPic.step = "0.5";
+  ratioPic.id = "wmd-ratio-pic";
+  ratioPic.value = String(reglagePic.ratio);
+  const changerPic = () => {
+    reglagePic = lireReglagePic({ actif: cochePic.checked, ratio: Number(ratioPic.value) });
+    ratioPic.value = String(reglagePic.ratio);
+    api.storage.local.set({ marchePic: reglagePic }).catch(() => {});
+    versionPage++;
+  };
+  cochePic.addEventListener("change", changerPic);
+  ratioPic.addEventListener("change", () => { cochePic.checked = true; changerPic(); });
+  casePic.title = "Une semaine (parmi les 8 dernières) où la carte s'est vendue bien plus cher que d'habitude : "
+    + "le prix moyen peut être faussé. Calculé avec l'historique des prix du site (onglet « Marché » de la fiche d'une carte).";
+  casePic.append(cochePic, document.createTextNode(" 🎈 Signaler les prix gonflés (pic à × "), ratioPic, document.createTextNode(" le prix habituel)"));
+  reperes.appendChild(casePic);
+
+  // 1.14 : cacher les enchères qui ne finissent pas dans les N prochaines minutes (5 par défaut, réglable en 1.16).
   const caseBientot = creer("label", undefined, "wmd-case");
   caseBientot.id = "wmd-case-bientot";
   const cocheBientot = creer("input");
@@ -378,10 +644,24 @@ function creerPanneau() {
     api.storage.local.set({ marcheBientotFini: cocheBientot.checked }).catch(() => {});
     filtrerEncheresBientotFinies();
   });
-  const texteBientot = creer("span", ` Seulement les enchères qui finissent dans ${BIENTOT_FINI_MINUTES} min`);
+  // 1.16 : la durée est choisie (en minutes), 5 par défaut.
+  const minutesBientot = creer("input");
+  minutesBientot.type = "number";
+  minutesBientot.min = "1";
+  minutesBientot.step = "1";
+  minutesBientot.id = "wmd-minutes-bientot";
+  minutesBientot.value = String(marcheBientotMinutes);
+  minutesBientot.addEventListener("change", () => {
+    marcheBientotMinutes = lireMinutesBientot(Math.round(Number(minutesBientot.value)));
+    minutesBientot.value = String(marcheBientotMinutes);
+    if (!cocheBientot.checked) { cocheBientot.checked = true; marcheBientotFini = true; }
+    api.storage.local.set({ marcheBientotFini: true, marcheBientotMinutes: marcheBientotMinutes }).catch(() => {});
+    filtrerEncheresBientotFinies();
+  });
+  const texteBientot = creer("span", " min");
   texteBientot.id = "wmd-texte-bientot";
-  caseBientot.append(cocheBientot, texteBientot);
-  optionsMarche.appendChild(caseBientot);
+  caseBientot.append(cocheBientot, document.createTextNode(" Seulement les enchères qui finissent dans "), minutesBientot, texteBientot);
+  filtres.appendChild(caseBientot);
 
   // 1.14 : cacher les cartes dont la mise dépasse un montant choisi.
   const casePrix = creer("label", undefined, "wmd-case");
@@ -407,7 +687,7 @@ function creerPanneau() {
   const textePrix = creer("span", " wikibidous");
   textePrix.id = "wmd-texte-prixmax";
   casePrix.append(cochePrix, document.createTextNode(" Seulement les mises jusqu'à "), montantPrix, textePrix);
-  optionsMarche.appendChild(casePrix);
+  filtres.appendChild(casePrix);
 
   // 1.16 : cacher les cartes dont la mise dépasse le prix moyen connu (les cartes sans prix moyen restent).
   const caseMoyenne = creer("label", undefined, "wmd-case");
@@ -437,12 +717,10 @@ function creerPanneau() {
   const texteMoyenne = creer("span", " % au-dessus du prix moyen");
   texteMoyenne.id = "wmd-texte-sousmoyenne";
   caseMoyenne.append(cocheMoyenne, document.createTextNode(" Cacher les cartes à plus de "), pctMoyenne, texteMoyenne);
-  optionsMarche.appendChild(caseMoyenne);
+  filtres.appendChild(caseMoyenne);
 
-  const statut = creer("div", "Prêt.");
-  const suggestions = creer("div"); // 1.9 : les étiquettes de la carte ouverte (visibles même panneau réduit)
-  suggestions.id = "wmd-suggestions";
-  statut.id = "wmd-statut";
+  construireLegende(legende);    // 1.17
+
   const echange = creer("div");
   echange.id = "wmd-echange";
   const resultats = creer("div");
@@ -454,7 +732,7 @@ function creerPanneau() {
   prixPage.addEventListener("click", evenement => {
     if (evenement.target instanceof Element && evenement.target.closest("summary")) prixPage.dataset.choisi = "1"; // ton choix est gardé
   });
-  panneau.append(statut, suggestions, echange, prixPage, resultats);
+  panneau.append(echange, prixPage, resultats);
 
   document.body.appendChild(panneau);
   actualiserPanneau();
@@ -479,10 +757,15 @@ function actualiserPanneau() {
     "wmd-case-sousmoyenne": marcheFiltrable, // 1.16
     "wmd-seuils": marcheFiltrable && reglages.marche, // 1.14
     "wmd-case-encadrees": marcheFiltrable && reglages.marche, // 1.16
+    "wmd-case-ecarts": marcheFiltrable && reglages.marche, // 1.16
+    "wmd-case-pic": marcheFiltrable && reglages.marche, // 1.17
+    "wmd-auto": marcheFiltrable, // 1.17
+    "wmd-legende": marcheFiltrable, // 1.17
     "wmd-manquantes": page === "toutes-les-cartes" && reglages.manquantes,
     "wmd-animees-jeu": page === "toutes-les-cartes" && reglages.animeesJeu,
     "wmd-animees-revoir": (page === "toutes-les-cartes" || page === "collection") && reglages.animeesJeu && aDesAnimeesJeu,
     "wmd-encheres": reglages.encheres && (page === "marche" || nombreEncheresSuivies > 0),
+    "wmd-remise": REMISE_EN_VENTE && (Boolean(remiseEnVente) || ((page === "marche" || page === "collection") && ventesInvendues().length > 0)), // 1.17.3
     "wmd-estimer": (page === "marche" || page === "collection") && reglages.marche,
     // 1.14 : quand le fichier partagé est réglé, « Mettre à jour les prix » remplace l'export classique.
     "wmd-maj-prix": (page === "marche" || page === "collection") && reglages.marche,
@@ -496,9 +779,17 @@ function actualiserPanneau() {
     if (bouton) bouton.hidden = !visible;
   }
   // 1.16 : le sous-menu « Options du Marché » n'apparaît que s'il contient au moins une option visible.
+  // 1.17 : pareil pour ses sous-menus et pour les groupes de boutons.
+  const aDuContenu = bloc => [...bloc.children].some(enfant => enfant.tagName !== "SUMMARY" && !enfant.classList.contains("wmd-groupe-titre") && !enfant.hidden);
+  for (const bloc of document.querySelectorAll("#wmd-panneau .wmd-sous-menu, #wmd-panneau .wmd-groupe")) {
+    if (bloc.id === "wmd-auto" || bloc.id === "wmd-legende") continue; // gérés par la liste ci-dessus
+    const cacher = !aDuContenu(bloc);
+    if (bloc.hidden !== cacher) bloc.hidden = cacher;
+  }
   const optionsMarche = document.getElementById("wmd-options-marche");
   if (optionsMarche) {
-    optionsMarche.hidden = ![...optionsMarche.children].some(enfant => enfant.tagName !== "SUMMARY" && !enfant.hidden);
+    const cacher = !aDuContenu(optionsMarche);
+    if (optionsMarche.hidden !== cacher) optionsMarche.hidden = cacher;
   }
 }
 
@@ -900,19 +1191,29 @@ api.storage.onChanged.addListener(changements => {
 // 1.14 : sur la liste du Marché, cacher les enchères dont le temps restant dépasse 5 minutes.
 // Rien n'est retiré de la page (la carte est seulement cachée) et rien n'est demandé au site :
 // on lit le compte à rebours affiché sur chaque carte. Une carte sans compte à rebours lisible reste affichée.
-const BIENTOT_FINI_MINUTES = 5;
+// 1.16 : la durée (en minutes) est choisie dans le panneau ; 5 par défaut.
 let marcheBientotFini = false;
-api.storage.local.get("marcheBientotFini").then(({ marcheBientotFini: valeur }) => {
-  marcheBientotFini = valeur === true;
-  const coche = document.querySelector("#wmd-case-bientot input");
+let marcheBientotMinutes = 5;
+function lireMinutesBientot(valeur) {
+  return Number.isFinite(valeur) && valeur >= 1 ? valeur : 5;
+}
+function afficherFiltreBientot() {
+  const coche = document.querySelector("#wmd-case-bientot input[type=checkbox]");
   if (coche) coche.checked = marcheBientotFini;
+  const minutes = document.getElementById("wmd-minutes-bientot");
+  if (minutes && document.activeElement !== minutes) minutes.value = String(marcheBientotMinutes);
+}
+api.storage.local.get(["marcheBientotFini", "marcheBientotMinutes"]).then(valeurs => {
+  marcheBientotFini = valeurs.marcheBientotFini === true;
+  marcheBientotMinutes = lireMinutesBientot(valeurs.marcheBientotMinutes);
+  afficherFiltreBientot();
   filtrerEncheresBientotFinies();
 }).catch(() => {});
 api.storage.onChanged.addListener(changements => {
-  if (!changements.marcheBientotFini) return;
-  marcheBientotFini = changements.marcheBientotFini.newValue === true;
-  const coche = document.querySelector("#wmd-case-bientot input");
-  if (coche) coche.checked = marcheBientotFini;
+  if (!changements.marcheBientotFini && !changements.marcheBientotMinutes) return;
+  if (changements.marcheBientotFini) marcheBientotFini = changements.marcheBientotFini.newValue === true;
+  if (changements.marcheBientotMinutes) marcheBientotMinutes = lireMinutesBientot(changements.marcheBientotMinutes.newValue);
+  afficherFiltreBientot();
   filtrerEncheresBientotFinies();
 });
 // Le temps restant d'une carte du Marché, en ms (null s'il n'est pas lisible).
@@ -930,12 +1231,12 @@ function filtrerEncheresBientotFinies() {
   let cachees = 0;
   for (const annonce of document.querySelectorAll("[id^='marketplace-auction-']")) {
     const reste = actif ? tempsRestantAnnonce(annonce) : null;
-    const cacher = reste !== null && reste > BIENTOT_FINI_MINUTES * MINUTE;
+    const cacher = reste !== null && reste > marcheBientotMinutes * MINUTE;
     if (annonce.classList.contains("wmd-fin-lointaine") !== cacher) annonce.classList.toggle("wmd-fin-lointaine", cacher);
     if (cacher) cachees++;
   }
   const texte = document.getElementById("wmd-texte-bientot");
-  const voulu = ` Seulement les enchères qui finissent dans ${BIENTOT_FINI_MINUTES} min` + (actif ? ` (${cachees} cachée(s))` : "");
+  const voulu = " min" + (actif ? ` (${cachees} cachée(s))` : "");
   if (texte && texte.textContent !== voulu) texte.textContent = voulu;
 }
 
@@ -1083,7 +1384,8 @@ function boutonChargerSuite() {
 function annoncesVisibles() {
   return [...document.querySelectorAll("[id^='marketplace-auction-']")]
     .filter(bloc => !bloc.classList.contains("wmd-trop-cher") && !bloc.classList.contains("wmd-fin-lointaine")
-      && !bloc.classList.contains("wmd-au-dessus-moyenne") && !bloc.classList.contains("wmd-pas-encadree"));
+      && !bloc.classList.contains("wmd-au-dessus-moyenne") && !bloc.classList.contains("wmd-pas-encadree")
+      && !bloc.classList.contains("wmd-autre-rarete"));
 }
 
 let chargementSuiteEnCours = false;
@@ -1103,7 +1405,7 @@ function aideFiltrePrixMax(actif, cachees) {
   const tri = triMarcheActuel();
   const decroissant = tri === "price_desc" || (!tri && prixDecroissants(prix));
   const bouton = boutonChargerSuite();
-  const signature = JSON.stringify([blocs.length, montant, plusBasse, tri, Boolean(bouton), chargementSuiteEnCours, marcheBientotFini]);
+  const signature = JSON.stringify([blocs.length, montant, plusBasse, tri, Boolean(bouton), chargementSuiteEnCours, marcheBientotFini, marcheBientotMinutes]);
   if (aide && aide.dataset.signature === signature && aide.nextElementSibling === grille) return;
   if (!aide) {
     aide = creer("div", undefined, "wmd-aide-prixmax");
@@ -1136,7 +1438,7 @@ function aideFiltrePrixMax(actif, cachees) {
     : `Le site charge les annonces 50 à la fois : les suivantes ont peut-être des mises jusqu'à ${nombreLisible(montant)}.`;
   aide.replaceChildren(
     creer("b", `🔎 Aucune carte affichée : les ${blocs.length} annonces chargées dépassent ${nombreLisible(montant)} wikibidous`
-      + (marcheBientotFini ? ` (ou finissent dans plus de ${BIENTOT_FINI_MINUTES} min)` : "") + "."),
+      + (marcheBientotFini ? ` (ou finissent dans plus de ${marcheBientotMinutes} min)` : "") + "."),
     creer("div", explication + (plusBasse !== null ? ` La moins chère ici : ${nombreLisible(plusBasse)}.` : "")
       + (bouton ? "" : " Il n'y a plus d'annonce à charger."), "wmd-aide-texte"),
     ...boutons
@@ -1186,6 +1488,210 @@ async function chargerSuiteJusquAuxMises() {
   }
 }
 
+// ---------------------------------------------------------------------
+//  1.17 : LE CHARGEMENT AUTOMATIQUE DU MARCHÉ (à activer dans « ⚙️ Options du Marché »)
+//  Pour relever beaucoup de prix sans rien faire : sur l'onglet « Parcourir » du Marché, l'extension
+//  choisit le tri voulu (récemment listées, mise la plus haute, mise la plus basse, fin imminente) et
+//  le filtre de rareté, puis clique sur « Charger la suite » du site, comme toi, toutes les 2 à 3 s
+//  (au hasard), jusqu'à la fin de la liste ou au nombre maximum de chargements choisi.
+//  Option : recharger la page toutes les X minutes, pour repartir de zéro (les nouvelles annonces).
+//  Les prix sont relevés comme d'habitude (mises actuelles seulement). Rien n'est acheté ni misé.
+//  Chaque chargement est une requête au site : c'est une automatisation, à utiliser avec modération.
+//  Pause automatique quand une fenêtre du site est ouverte ou que tu écris dans un champ.
+// ---------------------------------------------------------------------
+const TRIS_MARCHE = [["recent", "Récemment listées"], ["price_desc", "Mise la plus haute"], ["price_asc", "Mise la plus basse"], ["ending_soon", "Fin imminente"]];
+const AUTO_PAR_DEFAUT = { actif: false, tri: "recent", raretes: [], actualiser: false, minutes: 10, maxChargements: 100,
+  majPartage: false, minutesPartage: 30 }; // 1.17 : + mise à jour du fichier des prix partagés toutes les X minutes
+let autoMarche = { ...AUTO_PAR_DEFAUT };
+let autoEtat = null;      // le cycle en cours : { debut, prochain, chargements, prepare, fini, absences }
+let autoOccupe = false;
+function lireAutoMarche(valeur) {
+  const v = { ...AUTO_PAR_DEFAUT, ...(valeur || {}) };
+  return {
+    actif: false, // version sans chargement automatique : jamais actif
+    tri: TRIS_MARCHE.some(([t]) => t === v.tri) ? v.tri : "recent",
+    raretes: Array.isArray(v.raretes) ? v.raretes.filter(r => RARETES[r]) : [],
+    actualiser: v.actualiser === true,
+    minutes: Number.isFinite(Number(v.minutes)) && Number(v.minutes) >= 1 ? Math.round(Number(v.minutes)) : 10,
+    maxChargements: Number.isFinite(Number(v.maxChargements)) && Number(v.maxChargements) >= 1 ? Math.round(Number(v.maxChargements)) : 100,
+    majPartage: v.majPartage === true,
+    minutesPartage: Number.isFinite(Number(v.minutesPartage)) && Number(v.minutesPartage) >= 5 ? Math.round(Number(v.minutesPartage)) : 30
+  };
+}
+api.storage.local.get(["autoMarche", "derniereMajPartageAuto"]).then(({ autoMarche: valeur, derniereMajPartageAuto }) => {
+  autoMarche = lireAutoMarche(valeur);
+  derniereMajAuto = Number(derniereMajPartageAuto) || 0;
+  afficherReglageAuto();
+}).catch(() => {});
+// 1.17 : l'heure de la dernière mise à jour automatique du fichier partagé (gardée en mémoire : elle survit
+// au rechargement de la page, et un autre onglet ne la refait pas juste après). null = pas encore lue.
+let derniereMajAuto = null;
+api.storage.onChanged.addListener(changements => {
+  if (changements.derniereMajPartageAuto) derniereMajAuto = Number(changements.derniereMajPartageAuto.newValue) || 0;
+});
+api.storage.onChanged.addListener(changements => {
+  if (!changements.autoMarche) return;
+  const avant = autoMarche;
+  autoMarche = lireAutoMarche(changements.autoMarche.newValue);
+  // Un autre tri ou d'autres raretés : on repart de zéro (le tri et le filtre sont rechoisis).
+  if (!autoMarche.actif || avant.tri !== autoMarche.tri || avant.raretes.join() !== autoMarche.raretes.join()) autoEtat = null;
+  afficherReglageAuto();
+  versionPage++;
+});
+function enregistrerAutoMarche(modifs) {
+  autoMarche = lireAutoMarche({ ...autoMarche, ...modifs });
+  api.storage.local.set({ autoMarche: autoMarche }).catch(() => {});
+  afficherReglageAuto();
+}
+function afficherReglageAuto() {
+  const coche = document.getElementById("wmd-auto-actif");
+  if (coche) coche.checked = autoMarche.actif;
+  const tri = document.getElementById("wmd-auto-tri");
+  if (tri && document.activeElement !== tri) tri.value = autoMarche.tri;
+  for (const r of Object.keys(RARETES)) {
+    const c = document.getElementById(`wmd-auto-rarete-${r}`);
+    if (c) c.checked = autoMarche.raretes.includes(r);
+  }
+  const actualiser = document.getElementById("wmd-auto-actualiser");
+  if (actualiser) actualiser.checked = autoMarche.actualiser;
+  const minutes = document.getElementById("wmd-auto-minutes");
+  if (minutes && document.activeElement !== minutes) minutes.value = String(autoMarche.minutes);
+  const partage = document.getElementById("wmd-auto-partage");
+  if (partage) partage.checked = autoMarche.majPartage;
+  const minutesPartage = document.getElementById("wmd-auto-minutes-partage");
+  if (minutesPartage && document.activeElement !== minutesPartage) minutesPartage.value = String(autoMarche.minutesPartage);
+  const max = document.getElementById("wmd-auto-max");
+  if (max && document.activeElement !== max) max.value = String(autoMarche.maxChargements);
+  const bloc = document.getElementById("wmd-auto");
+  if (bloc) bloc.classList.toggle("wmd-auto-actif", autoMarche.actif);
+}
+const delaiAuto = () => 2000 + Math.round(Math.random() * 1000); // entre 2 et 3 secondes, au hasard
+
+// Les boutons de rareté du site (L, UR, SR, R, PC, C) au-dessus de la liste du Marché.
+function boutonsRareteMarche() {
+  const lettres = new Map(Object.keys(RARETES).map(r => [lettreRarete(r), r]));
+  const zone = document.querySelector("main") || document.body;
+  return [...zone.querySelectorAll("button")].filter(b => !estDansLePanneau(b) && estVisible(b) && lettres.has(b.textContent.trim()))
+    .map(b => ({ bouton: b, rarete: lettres.get(b.textContent.trim()) }));
+}
+const filtreChoisi = b => b.classList.contains(CONFIG.classeFiltreChoisi) || b.getAttribute("aria-pressed") === "true" || !b.classList.contains("opacity-50");
+
+// Choisit le tri et le filtre de rareté sur le site (comme si tu cliquais : une requête par changement).
+// Une seule rareté : le filtre du site. Plusieurs : pas de filtre du site, les autres raretés sont cachées par l'extension.
+async function preparerAutoMarche() {
+  if (triMarcheActuel() !== autoMarche.tri && trierMarche(autoMarche.tri)) await pause(1500);
+  const voulue = autoMarche.raretes.length === 1 ? autoMarche.raretes[0] : null;
+  for (const { bouton, rarete } of boutonsRareteMarche()) {
+    if (filtreChoisi(bouton) !== (rarete === voulue)) {
+      bouton.click();
+      await pause(1200);
+    }
+  }
+  if (voulue && !boutonsRareteMarche().some(({ bouton, rarete }) => rarete === voulue && filtreChoisi(bouton))) {
+    const b = boutonsRareteMarche().find(({ rarete }) => rarete === voulue);
+    if (b) { b.bouton.click(); await pause(1200); }
+  }
+}
+
+// Plusieurs raretés choisies : les annonces des autres raretés sont cachées (seulement pendant le chargement automatique).
+function filtrerRaretesAuto() {
+  const actif = autoMarche.actif && autoMarche.raretes.length > 1 && optionsMarcheActives();
+  for (const bloc of document.querySelectorAll("[id^='marketplace-auction-']")) {
+    const cacher = actif && !autoMarche.raretes.includes(rareteDuCadre(bloc));
+    if (bloc.classList.contains("wmd-autre-rarete") !== cacher) bloc.classList.toggle("wmd-autre-rarete", cacher);
+  }
+}
+
+// Un temps restant lisible : « 8 min 12 s », « 2 s ».
+function compteARebours(ms) {
+  const secondes = Math.max(0, Math.round(ms / 1000));
+  return secondes >= 60 ? `${Math.floor(secondes / 60)} min ${String(secondes % 60).padStart(2, "0")} s` : `${secondes} s`;
+}
+function afficherEtatAuto(texte) {
+  const zone = document.getElementById("wmd-auto-etat");
+  if (zone && zone.textContent !== texte) zone.textContent = texte;
+}
+
+// Tourne toutes les secondes.
+async function boucleAutoMarche() {
+  const onglet = pageActuelle() === "marche" && !REGEX_PAGE_ENCHERE.test(location.pathname) ? ongletMarcheOuvert() : "pas le Marché";
+  const surParcourir = onglet === null || /^parcourir/i.test(onglet || "");
+  if (!autoMarche.actif) { autoEtat = null; afficherEtatAuto("Arrêté."); return; }
+  if (!surParcourir) { autoEtat = null; afficherEtatAuto("En pause : ouvre l'onglet « Parcourir » du Marché."); return; }
+  if (autoOccupe || enCours || rechercheEnCours) return;
+  const maintenant = Date.now();
+  if (!autoEtat) autoEtat = { debut: maintenant, prochain: maintenant, chargements: 0, prepare: false, fini: "", absences: 0 };
+  // Une fenêtre du site ouverte, ou un champ où tu écris : on attend (et le rechargement aussi).
+  const actif = document.activeElement;
+  const occupe = document.querySelector(".sheet-overlay, [role='dialog']")
+    || (actif && /^(INPUT|TEXTAREA|SELECT)$/.test(actif.tagName) && !estDansLePanneau(actif));
+  const rechargement = autoMarche.actualiser ? autoEtat.debut + autoMarche.minutes * MINUTE : null;
+  // 1.17 : la mise à jour du fichier des prix partagés, toutes les X minutes (même pendant une pause ou après la fin de la liste).
+  const majPartage = autoMarche.majPartage && derniereMajAuto !== null ? derniereMajAuto + autoMarche.minutesPartage * MINUTE : null;
+  const finTexte = (rechargement ? ` · rechargement de la page dans ${compteARebours(rechargement - maintenant)}` : "")
+    + (!autoMarche.majPartage ? "" : !partageConfigure ? " · ☁️ fichier partagé pas réglé (Réglages, « Prix partagés »)"
+      : majPartageEnCours ? " · ☁️ mise à jour des prix partagés…" : majPartage ? ` · ☁️ prix partagés dans ${compteARebours(majPartage - maintenant)}` : "");
+  if (majPartage && partageConfigure && !majPartageEnCours && maintenant >= majPartage) {
+    derniereMajAuto = maintenant;
+    api.storage.local.set({ derniereMajPartageAuto: maintenant }).catch(() => {});
+    mettreAJourPrixPartages(true).catch(() => {});
+  }
+  if (occupe) {
+    autoEtat.prochain = Math.max(autoEtat.prochain, maintenant + 1000);
+    afficherEtatAuto(`⏸ En pause (fenêtre ouverte ou champ en cours de saisie) · ${autoEtat.chargements} chargement(s)${finTexte}`);
+    return;
+  }
+  if (rechargement && maintenant >= rechargement && !majPartageEnCours) { // pas pendant l'envoi des prix partagés
+    afficherEtatAuto("🔄 Rechargement de la page…");
+    afficherStatut("🤖 Chargement automatique : rechargement de la page pour repartir de zéro.");
+    location.reload();
+    return;
+  }
+  if (!autoEtat.prepare) {
+    // On attend que la liste du site soit là (le menu de tri et au moins une annonce).
+    if (!selectTriMarche() || !document.querySelector("[id^='marketplace-auction-']")) {
+      afficherEtatAuto("En attente de la liste du Marché…");
+      return;
+    }
+    autoOccupe = true;
+    afficherEtatAuto("Choix du tri et de la rareté…");
+    try {
+      await preparerAutoMarche();
+    } finally {
+      autoOccupe = false;
+    }
+    autoEtat.prepare = true;
+    autoEtat.prochain = Date.now() + delaiAuto();
+    return;
+  }
+  const annonces = document.querySelectorAll("[id^='marketplace-auction-']").length;
+  if (autoEtat.fini) {
+    afficherEtatAuto(`⏹ ${autoEtat.fini} · ${autoEtat.chargements} chargement(s), ${annonces} annonce(s)`
+      + (rechargement ? finTexte : " · coche « Recharger la page » pour repartir tout seul."));
+    return;
+  }
+  if (maintenant < autoEtat.prochain) {
+    afficherEtatAuto(`▶ ${autoEtat.chargements} / ${autoMarche.maxChargements} chargement(s), ${annonces} annonce(s) · suivant dans ${compteARebours(autoEtat.prochain - maintenant)}${finTexte}`);
+    return;
+  }
+  if (autoEtat.chargements >= autoMarche.maxChargements) {
+    autoEtat.fini = `Maximum de ${autoMarche.maxChargements} chargements atteint`;
+    return;
+  }
+  const bouton = boutonChargerSuite();
+  if (!bouton) {
+    // Le bouton disparaît aussi pendant un chargement : la fin de la liste n'est retenue qu'après 3 essais.
+    autoEtat.absences++;
+    autoEtat.prochain = maintenant + delaiAuto();
+    if (autoEtat.absences >= 3) autoEtat.fini = "Fin de la liste : plus d'annonce à charger";
+    return;
+  }
+  autoEtat.absences = 0;
+  bouton.click();
+  autoEtat.chargements++;
+  autoEtat.prochain = maintenant + delaiAuto();
+}
+
 // 1.13 : l'affichage allégé du Marché. Les cartes de la liste ne montrent plus que la rareté, le nom,
 // la mise et la durée, pour en voir beaucoup plus à la fois ; les cadres de l'extension restent.
 // Rien n'est retiré de la page : l'image et la description sont seulement cachées (style.css),
@@ -1214,7 +1720,7 @@ function appliquerMarcheCompact() {
     if (!contenu || !titre) continue;
     let lettre = "";
     for (const element of annonce.querySelectorAll("div, span")) {
-      if (element.children.length === 0 && rareteDepuisLettre(element.textContent.trim())) { lettre = element.textContent.trim(); break; }
+      if (estPetitBadge(element) && rareteDepuisLettre(element.textContent.trim())) { lettre = element.textContent.replace(/\s*shiny/i, "").trim(); break; }
     }
     const nom = (lettre ? lettre + " · " : "") + titre.textContent.trim();
     if (contenu.dataset.wmdNom !== nom) {
@@ -2445,10 +2951,20 @@ function prixApres(liste, etiquette) {
 }
 
 // Les éléments « feuilles » (sans enfant élément) d'une zone, avec leur texte nettoyé.
+// 1.17.1 : la rareté d'un badge shiny (« L✦ shiny ») dans une zone, ou null.
+function rareteBadgeShiny(zone) {
+  for (const badge of zone.querySelectorAll(".shiny-badge, div, span")) {
+    if (badge.children.length === 0 || estDeLExtension(badge) || !estPetitBadge(badge)) continue;
+    const rarete = rareteDepuisLettre(badge.textContent);
+    if (rarete) return rarete;
+  }
+  return null;
+}
+
 function feuilles(zone) {
   return [...zone.querySelectorAll("*")]
     .filter(element => element.children.length === 0 || element.matches("h1,h2,h3,h4,p,span"))
-    .filter(element => !element.classList.contains("wmd-tendance")) // 1.16 : nos flèches de variation ne sont pas des prix
+    .filter(element => !element.closest(".wmd-tendance, .wmd-ecart, .wmd-icones")) // 1.16 : nos flèches, « + » et icônes ne sont pas des prix
     .map(element => ({ element: element, texte: element.textContent.replace(/\s+/g, " ").trim() }));
 }
 
@@ -2471,6 +2987,7 @@ function lireAnnonceDetail(identifiant) {
   const toutes = feuilles(zone).filter(({ element }) => !estDansLePanneau(element));
   for (const { element, texte } of toutes) {
     if (!rarete && element.children.length === 0 && rareteDepuisLettre(texte)) rarete = rareteDepuisLettre(texte);
+    if (!rarete && element.tagName === "SPAN" && element.parentElement && estPetitBadge(element.parentElement)) rarete = rareteDepuisLettre(element.parentElement.textContent); // 1.17.1 : badge shiny
     if (prix === null && /^(vendue pour|mise actuelle)$/i.test(texte)) {
       terminee = /vendue/i.test(texte);
       // Le prix est écrit juste après l'étiquette, dans le même bloc.
@@ -2507,13 +3024,45 @@ function lireAnnoncesMarche(avecDepart = false) {
   }
   return annoncesLues.liste.map(a => ({ ...a }));
 }
+// 1.17.1 (optimisation) : chaque annonce du Marché (id="marketplace-auction-…") est lue une fois, puis gardée
+// tant que son texte ne change pas (les comptes à rebours mis à part). Avant, toute la page était relue
+// élément par élément à chaque passage : avec le chargement automatique, des milliers de cartes.
+const annoncesParBloc = { true: new WeakMap(), false: new WeakMap() };
+function signatureBloc(bloc) {
+  const morceaux = [];
+  const parcours = document.createTreeWalker(bloc, NodeFilter.SHOW_TEXT);
+  for (let n = parcours.nextNode(); n; n = parcours.nextNode()) {
+    const t = n.nodeValue;
+    if (t && t.trim() && !REGEX_MINUTEUR.test(t)) morceaux.push(t);
+  }
+  const image = bloc.querySelector('img[src*="/rarity/"]');
+  return morceaux.join("\u0001") + "\u0002" + (image ? image.getAttribute("src") : "");
+}
 function lireAnnoncesMarcheSansCache(avecDepart = false) {
   const enchere = location.pathname.match(REGEX_PAGE_ENCHERE);
   if (enchere) return avecDepart ? [] : lireAnnonceDetail(enchere[1].toLowerCase()); // nouveau en 1.4.5
+  const zone = document.querySelector("main") || document.body;
+  const blocs = zone.querySelectorAll("[id^='marketplace-auction-']");
+  if (!blocs.length) return lireAnnoncesDans(zone, zone, avecDepart);
+  const cache = annoncesParBloc[avecDepart];
+  const annonces = [];
+  for (const bloc of blocs) {
+    if (!bloc.parentElement || estDansLePanneau(bloc)) continue;
+    const signature = signatureBloc(bloc);
+    let lu = cache.get(bloc);
+    if (!lu || lu.signature !== signature || lu.liste.some(a => !a.cadre.isConnected || !bloc.contains(a.cadre))) {
+      lu = { signature: signature, liste: lireAnnoncesDans(bloc.parentElement, bloc, avecDepart) };
+      cache.set(bloc, lu);
+    }
+    annonces.push(...lu.liste);
+  }
+  return annonces;
+}
+// Lit les annonces dont l'étiquette « Mise actuelle » est dans « source » (sans sortir de « zone »).
+function lireAnnoncesDans(zone, source, avecDepart) {
   const annonces = [];
   const dejaVus = new Set();
-  const zone = document.querySelector("main") || document.body;
-  for (const { element: etiquette, texte } of feuilles(zone)) {
+  for (const { element: etiquette, texte } of feuilles(source)) {
     const depart = avecDepart && MARCHE.regexMiseDepart.test(texte);
     if (!(MARCHE.regexMiseActuelle.test(texte) || depart) || estDansLePanneau(etiquette)) continue;
 
@@ -2541,6 +3090,7 @@ function lireAnnoncesMarcheSansCache(avecDepart = false) {
     const trouve = imageRarete && imageRarete.getAttribute("src").match(/rarity\/([a-z_]+)\./);
     if (trouve) rarete = trouve[1];
     let vendeur = "";
+    if (!rarete) rarete = rareteBadgeShiny(cadre); // 1.17.1 : « L✦ shiny » n'est pas une feuille
     for (const { texte: t } of feuilles(cadre)) {
       if (!rarete && rareteDepuisLettre(t)) rarete = rareteDepuisLettre(t);
       const v = t.match(MARCHE.regexVendeur);
@@ -2562,7 +3112,10 @@ function lireAnnoncesMarcheSansCache(avecDepart = false) {
 // Enregistre les annonces lues. La même annonce revue plus tard est mise à jour, pas comptée deux fois.
 // Renvoie le nombre d'annonces nouvelles.
 let releveEnCours = false;
-async function enregistrerAnnonces(annonces) {
+function enregistrerAnnonces(annonces) {
+  return modifierMemoire(() => enregistrerAnnoncesMaintenant(annonces)); // 1.17 : chacun son tour
+}
+async function enregistrerAnnoncesMaintenant(annonces) {
   const { marche = { annonces: {} } } = await api.storage.local.get("marche");
   const maintenant = Date.now();
   let nouvelles = 0, modifiees = 0;
@@ -2586,8 +3139,9 @@ async function enregistrerAnnonces(annonces) {
   if (modifiees === 0) return 0;
   // Ménage : on oublie les annonces trop vieilles, et les plus anciennes au-delà du maximum.
   const limite = maintenant - MARCHE.joursGardes * 24 * 3600 * 1000;
-  const gardees = Object.entries(marche.annonces).filter(([, a]) => a.vu >= limite)
-    .sort((a, b) => b[1].vu - a[1].vu).slice(0, MARCHE.annoncesMax);
+  let gardees = Object.entries(marche.annonces).filter(([, a]) => a.vu >= limite);
+  // 1.17.1 : le tri (coûteux sur des milliers d'annonces) seulement quand il y en a trop.
+  if (gardees.length > MARCHE.annoncesMax) gardees = gardees.sort((a, b) => b[1].vu - a[1].vu).slice(0, MARCHE.annoncesMax);
   await api.storage.local.set({ marche: { annonces: Object.fromEntries(gardees), moyennes: marche.moyennes || {} } });
   return nouvelles;
 }
@@ -2596,12 +3150,25 @@ async function enregistrerAnnonces(annonces) {
 // Nouveau en 1.4.3 : dès que les annonces affichées changent (arrivée sur le marché, une recherche,
 // un filtre, une autre page), leurs prix s'affichent tout seuls dans le panneau.
 let signatureMarche = "";
+// 1.17.1 (optimisation) : ce qui a déjà été enregistré (clé → « nom|rareté|prix|fini », et quand).
+// Une annonce inchangée n'est plus réenregistrée à chaque passage : la mémoire n'est relue et réécrite
+// que s'il y a du nouveau (sa date « vu » est quand même rafraîchie toutes les 10 minutes).
+const dejaEnregistrees = new Map();
+const RAFRAICHIR_VU_MS = 10 * 60 * 1000;
+api.storage.onChanged.addListener(changements => { if (changements.marche) dejaEnregistrees.clear(); });
 async function releverMarche() {
   if (pageActuelle() !== "marche" || !reglages.marche || releveEnCours) return 0;
   releveEnCours = true;
   try {
     const annonces = lireAnnoncesMarche();
-    const nouvelles = await enregistrerAnnonces(annonces);
+    const maintenant = Date.now();
+    const empreinte = a => `${a.nom}|${a.rarete}|${a.prix}|${a.terminee}`;
+    const aEnregistrer = annonces.filter(a => {
+      const deja = dejaEnregistrees.get(a.cle);
+      return !deja || deja.empreinte !== empreinte(a) || maintenant - deja.le > RAFRAICHIR_VU_MS;
+    });
+    const nouvelles = aEnregistrer.length ? await enregistrerAnnonces(aEnregistrer) : 0;
+    for (const a of aEnregistrer) dejaEnregistrees.set(a.cle, { empreinte: empreinte(a), le: maintenant });
     const signature = annonces.map(a => a.cle + a.prix).join("|") + "#" + compterMisesDeDepart();
     if (signature !== signatureMarche && !enCours) {
       signatureMarche = signature;
@@ -2655,7 +3222,10 @@ async function prixDeCettePage(annonces, ignorees) {
   const lignes = [...groupes.values()].sort((a, b) => ordreRarete(b.rarete) - ordreRarete(a.rarete) || a.nom.localeCompare(b.nom, "fr"));
   zone.appendChild(creer("div", `${ignorees} mise(s) de départ ignorée(s). « fini » = enchère terminée (prix de vente). `
     + "Les autres enchères sont en cours : le prix peut encore monter.", "wmd-discret"));
-  zone.appendChild(creerTableau(["Carte", "Rar.", "Mises actuelles", "Min", "Max", "À toi"], lignes.map(g => {
+  // 1.17 : au plus 150 lignes (avec le chargement automatique, la page peut avoir des milliers d'annonces).
+  const LIGNES_MAX = 150;
+  if (lignes.length > LIGNES_MAX) zone.appendChild(creer("div", `Les ${LIGNES_MAX} premières cartes sur ${lignes.length} (des plus rares aux plus communes).`, "wmd-discret"));
+  zone.appendChild(creerTableau(["Carte", "Rar.", "Mises actuelles", "Min", "Max", "À toi"], lignes.slice(0, LIGNES_MAX).map(g => {
     const nombres = g.prix.map(p => parseInt(p, 10)).sort((a, b) => a - b);
     const textes = [...g.prix].sort((a, b) => parseInt(a, 10) - parseInt(b, 10)).map(p => typeof p === "number" ? nombreLisible(p) : p);
     return { classe: `wmd-${g.rarete}`, valeurs: [lienCarte(g.nom, g.rarete), lettreRarete(g.rarete), textes.join(" · "),
@@ -2832,13 +3402,100 @@ function tendancesDepuisHistorique(rarete, calcule) {
   };
 }
 
+// 1.17 : UN PRIX GONFLÉ ARTIFICIELLEMENT ?
+// Certains joueurs font monter le prix d'une carte d'un coup (ventes entre eux à un prix très haut),
+// puis le prix retombe à la normale. Le prix moyen du site (et celui de l'extension, la moyenne des
+// 4 dernières semaines) est alors faussé, et des enchères ont l'air de bonnes affaires sans en être.
+// On compare chaque semaine des 8 dernières au prix HABITUEL de la carte : la médiane des moyennes
+// hebdomadaires des 16 dernières semaines (une semaine folle ne la fait presque pas bouger).
+// Il faut au moins 4 semaines avec des ventes. La semaine la plus haute, si elle dépasse 1,5 × le prix
+// habituel, est gardée ; elle n'est SIGNALÉE (🎈) que si elle dépasse le seuil choisi (× 2 par défaut).
+// Renvoie { ratio, prix, normal, jour, ventes, retombe, dansMoyenne, sansPic } ou null.
+//  - retombe : une semaine plus récente est revenue sous 1,5 × le prix habituel ;
+//  - dansMoyenne : le pic est dans les 4 dernières semaines, il gonfle donc le prix moyen ;
+//  - sansPic : la moyenne des 4 dernières semaines SANS les semaines anormales (ou le prix habituel).
+const PIC_MINIMUM = 1.5;
+function picDepuisHistorique(rarete, calcule) {
+  const SEMAINE = 7 * JOUR;
+  const debut = periode => Date.parse(periode.debut + "T00:00:00Z");
+  const semaines = (rarete.semaines || []).filter(x => x.moyenne > 0 && x.nb > 0 && Number.isFinite(debut(x))
+    && debut(x) > calcule - 16 * SEMAINE && debut(x) <= calcule).sort((a, b) => debut(a) - debut(b));
+  if (semaines.length < 4) return null;
+  const normal = mediane(semaines.map(x => x.moyenne));
+  if (!(normal > 0)) return null;
+  let pic = null;
+  for (const x of semaines) {
+    if (debut(x) <= calcule - 8 * SEMAINE) continue;
+    const ratio = x.moyenne / normal;
+    if (ratio >= PIC_MINIMUM && (!pic || ratio > pic.ratio)) pic = { semaine: x, ratio: ratio };
+  }
+  if (!pic) return null;
+  const dansFenetre = x => debut(x) + SEMAINE > calcule - 28 * JOUR; // les 4 semaines du prix moyen
+  const saines = semaines.filter(x => dansFenetre(x) && x.moyenne < PIC_MINIMUM * normal);
+  const ventesSaines = saines.reduce((total, x) => total + x.nb, 0);
+  return {
+    ratio: Math.round(pic.ratio * 10) / 10,
+    prix: Math.round(pic.semaine.moyenne),
+    normal: Math.round(normal),
+    jour: pic.semaine.debut,
+    ventes: pic.semaine.nb,
+    retombe: semaines.some(x => debut(x) > debut(pic.semaine) && x.moyenne < PIC_MINIMUM * normal),
+    dansMoyenne: dansFenetre(pic.semaine),
+    sansPic: ventesSaines ? Math.round(saines.reduce((total, x) => total + x.moyenne * x.nb, 0) / ventesSaines) : Math.round(normal)
+  };
+}
+
+// 1.17 : le réglage des prix gonflés (« ⚙️ Options du Marché ») : signaler ou non, et à partir de quel multiple.
+let reglagePic = { actif: true, ratio: 2 };
+function lireReglagePic(valeur) {
+  const ratio = valeur && Number(valeur.ratio);
+  return { actif: !valeur || valeur.actif !== false, ratio: Number.isFinite(ratio) && ratio >= PIC_MINIMUM ? ratio : 2 };
+}
+api.storage.local.get("marchePic").then(({ marchePic }) => {
+  reglagePic = lireReglagePic(marchePic);
+  afficherReglagePic();
+  versionPage++;
+}).catch(() => {});
+api.storage.onChanged.addListener(changements => {
+  if (!changements.marchePic) return;
+  reglagePic = lireReglagePic(changements.marchePic.newValue);
+  afficherReglagePic();
+  const encart = document.getElementById("wmd-prix-fiche");
+  if (encart) encart.dataset.cle = "";
+  versionPage++;
+});
+function afficherReglagePic() {
+  const coche = document.querySelector("#wmd-case-pic input[type=checkbox]");
+  if (coche) coche.checked = reglagePic.actif;
+  const champ = document.getElementById("wmd-ratio-pic");
+  if (champ && document.activeElement !== champ) champ.value = String(reglagePic.ratio);
+}
+// Le pic à signaler pour une carte (d'après la mémoire « tendances »), ou null.
+function picASignaler(tendance) {
+  const pic = tendance && tendance.pic;
+  return reglagePic.actif && pic && pic.ratio >= reglagePic.ratio ? pic : null;
+}
+function jourCourt(jour) {
+  const d = dateDepuisJour(jour);
+  return d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : String(jour || "?");
+}
+// L'explication d'un pic, en une phrase (infobulles, fiche, page d'une enchère).
+function textePic(pic) {
+  return `🎈 Prix peut-être gonflé : la semaine du ${jourCourt(pic.jour)}, ${pic.ventes} vente(s) à ${nombreLisible(pic.prix)} en moyenne, `
+    + `soit × ${String(pic.ratio).replace(".", ",")} le prix habituel (≈ ${nombreLisible(pic.normal)}). `
+    + (pic.retombe ? "Le prix est retombé depuis. " : "Le prix n'est pas encore retombé. ")
+    + (pic.dansMoyenne ? `Ce pic fausse le prix moyen : sans lui, il serait d'environ ${nombreLisible(pic.sansPic)}.` : "");
+}
+
 // Range les variations de toutes les raretés d'un historique (mémoire « tendances », à part des prix).
+// 1.17 : avec le pic de prix éventuel (picDepuisHistorique).
 async function rangerTendances(nom, historique) {
   const { tendances = {} } = await api.storage.local.get("tendances");
   for (const [code, donnees] of Object.entries(historique.parRarete)) {
     const rarete = rareteDuSite(code);
     if (!rarete) continue;
-    tendances[`${nom}|${rarete}`] = { ...tendancesDepuisHistorique(donnees, historique.calcule), calcule: historique.calcule };
+    tendances[`${nom}|${rarete}`] = { ...tendancesDepuisHistorique(donnees, historique.calcule),
+      pic: picDepuisHistorique(donnees, historique.calcule), calcule: historique.calcule };
   }
   await api.storage.local.set({ tendances: tendances });
 }
@@ -2852,6 +3509,13 @@ async function releverPrixMoyen() {
   if (!etiquettes.length && !(historiqueEnAttente && nomsDesCartes.has(historiqueEnAttente.carteId))) return;
   moyenneEnCours = true;
   try {
+    await modifierMemoire(() => releverPrixMoyenMaintenant(etiquettes)); // 1.17 : chacun son tour
+  } finally {
+    moyenneEnCours = false;
+  }
+}
+async function releverPrixMoyenMaintenant(etiquettes) {
+  {
     const { marche = { annonces: {} } } = await api.storage.local.get("marche");
     marche.moyennes = marche.moyennes || {};
     let modifie = false;
@@ -2887,11 +3551,10 @@ async function releverPrixMoyen() {
         nomsDesCartes.set(historique.carteId, nom);
         if (rangerHistorique(marche, nom, historique)) modifie = true;
         await rangerTendances(nom, historique);
+        historiqueEnregistre = { nom: nom, quand: Date.now() }; // 1.17.3 : la pastille rouge de la fiche
       }
     }
     if (modifie) await api.storage.local.set({ marche: marche });
-  } finally {
-    moyenneEnCours = false;
   }
 }
 
@@ -3060,20 +3723,30 @@ async function importerPrixCSV(nomFichier, lignes, colonne) {
   const c = { nom: colonne("Carte"), rarete: colonne("Rareté"), estime: colonne("Prix estimé"),
     moyenne: colonne("Prix moyen du site"), moyenneLe: colonne("Prix moyen relu le"), tous: colonne("Tous les prix"),
     semaine: colonne("Variation 1 semaine (%)"), deuxMois: colonne("Variation 2 mois (%)"), tendanceLe: colonne("Variations du"),
-    marcheLe: colonne("Prix du Marché relevés le") };
+    marcheLe: colonne("Prix du Marché relevés le"), pic: colonne("Pic de prix") };
   await attendre(() => !moyenneEnCours && !releveEnCours, 5000);
   moyenneEnCours = true;
   releveEnCours = true;
   try {
+    await modifierMemoire(() => importerPrixMaintenant(nomFichier, lignes, c)); // 1.17 : chacun son tour
+  } finally {
+    moyenneEnCours = false;
+    releveEnCours = false;
+  }
+}
+async function importerPrixMaintenant(nomFichier, lignes, c) {
+  {
     const { marche = { annonces: {} } } = await api.storage.local.get("marche");
     marche.annonces = marche.annonces || {};
     marche.moyennes = marche.moyennes || {};
     const avecAnnonces = new Set(Object.values(marche.annonces).map(a => `${a.nom}|${a.rarete}`));
     // 1.16 : le relevé le plus récent des prix du Marché de chaque carte, dans l'extension.
     const marcheVuLe = new Map();
-    for (const a of Object.values(marche.annonces)) {
+    const clesParCarte = new Map(); // 1.17.1 : les clés des annonces de chaque carte (avant : toute la mémoire relue pour chaque carte)
+    for (const [cleAnnonce, a] of Object.entries(marche.annonces)) {
       const cle = `${a.nom}|${a.rarete}`;
       if ((Number(a.vu) || 0) > (marcheVuLe.get(cle) || 0)) marcheVuLe.set(cle, Number(a.vu));
+      if (clesParCarte.has(cle)) clesParCarte.get(cle).push(cleAnnonce); else clesParCarte.set(cle, [cleAnnonce]);
     }
     const { tendances = {} } = await api.storage.local.get("tendances"); // 1.16
     let moyennes = 0, annonces = 0, ignorees = 0, plusRecentes = 0, variations = 0, marchesRemplaces = 0;
@@ -3114,8 +3787,9 @@ async function importerPrixCSV(nomFichier, lignes, colonne) {
         const semaine = c.semaine !== -1 ? entierSigneCSV(l[c.semaine]) : null;
         const deuxMois = c.deuxMois !== -1 ? entierSigneCSV(l[c.deuxMois]) : null;
         const connues = tendances[cle];
-        if (le && (semaine !== null || deuxMois !== null) && (!connues || jourDe(le) > jourDe(connues.calcule))) {
-          tendances[cle] = { semaine: semaine, deuxMois: deuxMois, calcule: le };
+        const pic = c.pic !== -1 ? picDepuisCSV(l[c.pic]) : null; // 1.17
+        if (le && (semaine !== null || deuxMois !== null || pic) && (!connues || jourDe(le) > jourDe(connues.calcule))) {
+          tendances[cle] = { semaine: semaine, deuxMois: deuxMois, pic: pic, calcule: le };
           variations++;
         }
       }
@@ -3125,29 +3799,30 @@ async function importerPrixCSV(nomFichier, lignes, colonne) {
         if (avecAnnonces.has(cle)) {
           // Déjà des prix du Marché pour cette carte : remplacés seulement par des prix relevés un jour plus récent.
           if (!leMarche || !(jourDe(leMarche) > jourDe(marcheVuLe.get(cle) || 0))) { ignorees++; continue; }
-          for (const [cleAnnonce, a] of Object.entries(marche.annonces)) {
-            if (a.nom === nom && a.rarete === rarete) delete marche.annonces[cleAnnonce];
-          }
+          for (const cleAnnonce of clesParCarte.get(cle) || []) delete marche.annonces[cleAnnonce];
+          clesParCarte.delete(cle);
           marchesRemplaces++;
         }
         prix.forEach((p, i) => {
           // Clé sans « | » (les anciennes clés « carte|rareté|vendeur » sont effacées par le relevé).
-          marche.annonces[`import-${encodeURIComponent(nom)}-${rarete}-${i}`] = { nom: nom, rarete: rarete, prix: p.prix, terminee: p.terminee, vu: leMarche || maintenant };
+          const cleImport = `import-${encodeURIComponent(nom)}-${rarete}-${i}`;
+          marche.annonces[cleImport] = { nom: nom, rarete: rarete, prix: p.prix, terminee: p.terminee, vu: leMarche || maintenant };
+          if (clesParCarte.has(cle)) clesParCarte.get(cle).push(cleImport); else clesParCarte.set(cle, [cleImport]);
           annonces++;
         });
         avecAnnonces.add(cle);
         marcheVuLe.set(cle, leMarche || maintenant);
       }
     }
-    await api.storage.local.set(variations ? { marche: marche, tendances: tendances } : { marche: marche });
+    // 1.17.1 : rien de nouveau dans le fichier : la mémoire n'est pas réécrite (ni relue par tous les onglets).
+    if (moyennes || annonces || plusRecentes || marchesRemplaces || variations) {
+      await api.storage.local.set(variations ? { marche: marche, tendances: tendances } : { marche: marche });
+    }
     afficherStatut(`Prix importés depuis « ${nomFichier} » : ${moyennes} prix moyen(s) du site et ${annonces} prix du Marché ajoutés`
       + (variations ? `, ${variations} variation(s) de prix reprise(s)` : "")
       + (marchesRemplaces ? `, les prix du Marché de ${marchesRemplaces} carte(s) remplacés par des plus récents` : "")
       + (plusRecentes ? `, ${plusRecentes} prix moyen(s) remplacé(s) par un plus récent` : "")
       + (ignorees ? ` ; ${ignorees} donnée(s) laissée(s) de côté (déjà connues, et pas plus récentes).` : "."));
-  } finally {
-    moyenneEnCours = false;
-    releveEnCours = false;
   }
 }
 
@@ -3513,6 +4188,20 @@ async function exporterPrixMarche() {
   afficherStatut("Fichier CSV des prix du marché téléchargé.");
 }
 
+// 1.17 : le pic de prix dans le fichier CSV : « ×3.2 | 4200 | 2026-11-03 | habituel 1300 | sans pic 1350 | 2 ventes | retombé | dans la moyenne ».
+function textePicCSV(pic) {
+  return [`×${pic.ratio}`, pic.prix, pic.jour, `habituel ${pic.normal}`, `sans pic ${pic.sansPic}`, `${pic.ventes} ventes`,
+    pic.retombe ? "retombé" : "pas retombé", pic.dansMoyenne ? "dans la moyenne" : "hors moyenne"].join(" | ");
+}
+function picDepuisCSV(texte) {
+  const morceaux = String(texte || "").split("|").map(m => m.trim());
+  if (morceaux.length < 8) return null;
+  const nombre = m => { const n = Number(String(m).replace(/[^\d.]/g, "")); return Number.isFinite(n) && n > 0 ? n : null; };
+  const pic = { ratio: nombre(morceaux[0]), prix: nombre(morceaux[1]), jour: morceaux[2], normal: nombre(morceaux[3]),
+    sansPic: nombre(morceaux[4]), ventes: nombre(morceaux[5]) || 0, retombe: morceaux[6] === "retombé", dansMoyenne: morceaux[7] === "dans la moyenne" };
+  return pic.ratio && pic.prix && pic.normal && /^\d{4}-\d{2}-\d{2}$/.test(pic.jour) ? pic : null;
+}
+
 // 1.14 : le contenu du fichier des prix (null s'il n'y a aucun prix), pour le téléchargement et pour Google Drive.
 async function csvPrixMarche() {
   const groupes = await prixParCarte();
@@ -3529,7 +4218,7 @@ async function csvPrixMarche() {
     const cle = `${a.nom}|${a.rarete}`;
     if ((Number(a.vu) || 0) > (marcheVuLe.get(cle) || 0)) marcheVuLe.set(cle, Number(a.vu));
   }
-  const lignes = ["Carte;Rareté;Prix estimé;Minimum seulement;Ventes terminées;Enchères en cours;Prix le plus bas;Prix le plus haut;À moi;Tous les prix;Prix moyen du site;Prix moyen relu le;Variation 1 semaine (%);Variation 2 mois (%);Variations du;Prix du Marché relevés le"];
+  const lignes = ["Carte;Rareté;Prix estimé;Minimum seulement;Ventes terminées;Enchères en cours;Prix le plus bas;Prix le plus haut;À moi;Tous les prix;Prix moyen du site;Prix moyen relu le;Variation 1 semaine (%);Variation 2 mois (%);Variations du;Prix du Marché relevés le;Pic de prix"];
   for (const g of [...groupes.values()].sort((a, b) => b.estimation - a.estimation)) {
     const m = moyennes[`${g.nom}|${g.rarete}`];
     const t = tendances[`${g.nom}|${g.rarete}`];
@@ -3538,7 +4227,8 @@ async function csvPrixMarche() {
       champCSV(g.liste.map(p => p.prix + (p.terminee ? " (fini)" : "")).join(" · ")),
       m ? m.prix : "", m && m.vu ? jourDe(m.vu) : "", // 1.14 : la date au jour près (2026-11-22)
       t && Number.isFinite(t.semaine) ? t.semaine : "", t && Number.isFinite(t.deuxMois) ? t.deuxMois : "",
-      t && t.calcule ? jourDe(t.calcule) : "", jourDe(marcheVuLe.get(`${g.nom}|${g.rarete}`))].join(";"));
+      t && t.calcule ? jourDe(t.calcule) : "", jourDe(marcheVuLe.get(`${g.nom}|${g.rarete}`)),
+      champCSV(t && t.pic ? textePicCSV(t.pic) : "")].join(";")); // 1.17 : le pic de prix (prix gonflé ?)
   }
   return MARQUE_EXCEL + lignes.join("\r\n");
 }
@@ -3547,7 +4237,20 @@ async function csvPrixMarche() {
 // à travers le script Google réglé dans les réglages), ajouter ce qui manque aux prix de l'extension
 // (comme l'import), puis renvoyer le fichier complet. Rien n'est envoyé à WikiMasters.
 let majPartageEnCours = false;
-async function mettreAJourPrixPartages() {
+// 1.17.1 (optimisation) : l'empreinte du dernier fichier envoyé. En automatique, si rien n'a changé
+// depuis, le fichier n'est pas renvoyé (l'envoi est la partie la plus lente : tout le fichier part chez Google).
+// Il est quand même renvoyé au moins toutes les 6 heures, et toujours avec le bouton.
+const RENVOI_PARTAGE_MAX_MS = 6 * 60 * 60 * 1000;
+function empreinteTexte(texte) {
+  let h1 = 0x811c9dc5, h2 = 0;
+  for (let i = 0; i < texte.length; i++) {
+    const c = texte.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 16777619);
+    h2 = (Math.imul(h2, 31) + c) | 0;
+  }
+  return `${texte.length}-${(h1 >>> 0).toString(36)}-${(h2 >>> 0).toString(36)}`;
+}
+async function mettreAJourPrixPartages(automatique = false) {
   if (majPartageEnCours) return;
   majPartageEnCours = true;
   const demander = async contenu => {
@@ -3566,8 +4269,15 @@ async function mettreAJourPrixPartages() {
     }
     const contenu = await csvPrixMarche();
     if (!contenu) return afficherStatut(bilanImport + "Aucun prix à envoyer : passe d'abord sur la page Marché.");
+    const empreinte = empreinteTexte(contenu);
+    const { partageDernierEnvoi: dernier } = await api.storage.local.get("partageDernierEnvoi");
+    if (automatique && lu.texte && lu.texte.trim() && dernier && dernier.empreinte === empreinte
+      && Date.now() - dernier.le < RENVOI_PARTAGE_MAX_MS) {
+      return afficherStatut(bilanImport + `☁️ Rien de nouveau à envoyer (${dateLisible(Date.now())}) : le fichier partagé a déjà tes prix.`);
+    }
     afficherStatut(bilanImport + "☁️ Envoi du fichier complet…");
     const envoi = await demander({ type: "partage-ecrire", texte: contenu });
+    await api.storage.local.set({ partageDernierEnvoi: { empreinte: empreinte, le: Date.now() } }).catch(() => {});
     afficherStatut(bilanImport + `☁️ Fichier partagé mis à jour (${dateLisible(Date.now())}) : ${envoi.lignes} carte(s)`
       + (envoi.ajoutees ? `, dont ${envoi.ajoutees} nouvelle(s) apportée(s) par toi.` : "."));
   } catch (erreur) {
@@ -3590,7 +4300,10 @@ async function mettreAJourPrixPartages() {
 // ---------------------------------------------------------------------
 
 // Nouveau en 1.6.5 : efface les prix relevés d'une carte dans une rareté.
-async function oublierPrix(nom, rarete) {
+function oublierPrix(nom, rarete) {
+  return modifierMemoire(() => oublierPrixMaintenant(nom, rarete)); // 1.17 : chacun son tour
+}
+async function oublierPrixMaintenant(nom, rarete) {
   const { marche } = await api.storage.local.get("marche");
   if (!marche || !marche.annonces) return;
   let effacees = 0;
@@ -3628,7 +4341,7 @@ async function afficherPrixDansFiche() {
   // seulement le petit badge « UR » sur l'image de la carte, et le fond « …/ultra_rare.webp ».
   if (!rarete) {
     for (const element of fiche.querySelectorAll("div, span")) {
-      if (element.children.length === 0 && !estDansLePanneau(element)
+      if (estPetitBadge(element) && !estDansLePanneau(element)
         && (rarete = rareteDepuisLettre(element.textContent.trim()))) break;
     }
   }
@@ -3688,6 +4401,9 @@ async function afficherPrixDansFiche() {
     } else {
       encart.appendChild(creer("b", `Aucun prix relevé pour ${nom} en ${RARETES[rarete] ? RARETES[rarete].nom : "cette rareté"}.`));
     }
+    // 1.17 : prix peut-être gonflé artificiellement (🎈), d'après l'historique des prix du site.
+    const pic = reglages.marche ? picASignaler(await tendanceDe(nom, rarete)) : null;
+    if (pic) encart.appendChild(creer("div", textePic(pic), "wmd-alerte-pic"));
     // 1.10 : le prix d'achat, si tu as remporté cette carte aux enchères.
     for (const achat of achatsDe(nom, rarete)) {
       encart.appendChild(creer("div", `🛒 Achetée aux enchères : ${texteAchat(achat)}${dateAchat(achat)}`
@@ -3705,10 +4421,21 @@ async function afficherPrixDansFiche() {
 }
 
 // Si les prix changent (un relevé au marché dans un autre onglet), on recalcule l'encart.
+// 1.17 : aussi quand les variations (et le pic de prix) changent, et pour l'encart des cartes que tu n'as pas.
 api.storage.onChanged.addListener(changements => {
-  const encart = document.getElementById("wmd-prix-fiche");
-  if (changements.marche && encart) encart.dataset.cle = "";
+  if (!changements.marche && !changements.tendances) return;
+  tendancesFiche = null;
+  for (const id of ["wmd-prix-fiche", "wmd-amis-fiche"]) {
+    const encart = document.getElementById(id);
+    if (encart) encart.dataset.cle = "";
+  }
 });
+// 1.17 : la mémoire « tendances » (variations et pic de prix), gardée en copie pour les fiches.
+let tendancesFiche = null;
+async function tendanceDe(nom, rarete) {
+  if (!tendancesFiche) tendancesFiche = (await api.storage.local.get("tendances")).tendances || {};
+  return tendancesFiche[`${nom}|${rarete}`] || null;
+}
 
 
 
@@ -3765,6 +4492,76 @@ function blocVoirAuMarche(nom, rarete, { catalogue = false, depuis = null } = {}
     bloc.append(" · ", lien);
   }
   return bloc;
+}
+
+// ---------------------------------------------------------------------
+//  « 🛒 CHERCHER AU MARCHÉ » SOUS CHAQUE CARTE DE LA LISTE DE SOUHAITS DE LA GUILDE
+//  Sur la page Guilde (/guild), le site n'ouvre pas la fiche des cartes souhaitées. Sous chacune,
+//  l'extension ajoute un bouton : c'est seulement quand TU cliques dessus que le Marché s'ouvre dans
+//  un nouvel onglet et y cherche la carte, dans la rareté affichée (lien « toutes raretés » à côté).
+//  Rien n'est fait tout seul sur la page Guilde ; rien n'est acheté ni misé.
+// ---------------------------------------------------------------------
+function cartesSouhaitsGuilde() {
+  const titreListe = [...document.querySelectorAll("h3")].find(titre =>
+    !estDansLePanneau(titre) && titre.textContent.trim() === "Liste de souhaits");
+  if (!titreListe) return [];
+  const section = titreListe.closest(".card-frame") || (titreListe.parentElement && titreListe.parentElement.parentElement);
+  if (!section) return [];
+  const titres = [...section.querySelectorAll("h3")].filter(titre => titre !== titreListe && !estDeLExtension(titre) && titre.textContent.trim());
+  if (!titres.length) return [];
+  // La grille des cartes : le bloc « flex-wrap » qui contient les titres ; chaque enfant = une carte + ses liens.
+  const grille = [...section.querySelectorAll("div.flex-wrap")].find(div => titres.every(titre => div.contains(titre)));
+  const cartes = [];
+  for (const titre of titres) {
+    let element = titre;
+    if (grille) {
+      while (element.parentElement && element.parentElement !== grille) element = element.parentElement;
+      if (element.parentElement !== grille) continue;
+    } else {
+      // Sans grille reconnue : le plus grand bloc qui ne contient que CE titre de carte.
+      while (element.parentElement && element.parentElement !== section
+        && titres.filter(autre => element.parentElement.contains(autre)).length === 1) element = element.parentElement;
+    }
+    const rarete = rareteDuCadre(element);
+    cartes.push({ nom: titre.textContent.trim(), rarete: RARETES[rarete] ? rarete : null, cadre: element });
+  }
+  return cartes;
+}
+
+function boutonsMarcheSouhaitsGuilde() {
+  if (!location.pathname.startsWith("/guild")) return;
+  for (const { nom, rarete, cadre } of cartesSouhaitsGuilde()) {
+    const signature = JSON.stringify([nom, rarete]);
+    const ancien = [...cadre.children].find(enfant => enfant.classList.contains("wmd-souhait-marche"));
+    if (ancien && ancien.dataset.signature === signature && ancien === cadre.lastElementChild) continue; // déjà là
+    if (ancien) ancien.remove();
+    const bloc = creer("div", undefined, "wmd-souhait-marche");
+    bloc.dataset.signature = signature;
+    const lettre = rarete ? lettreRarete(rarete) : null;
+    const bouton = creer("button", "🛒 Chercher au Marché", "wmd-souhait-marche-bouton");
+    bouton.type = "button";
+    bouton.title = `Ouvre le Marché dans un nouvel onglet et y cherche « ${nom} »`
+      + (rarete ? ` en ${RARETES[rarete].nom}` : " (toutes raretés)") + ". Rien n'est acheté ni misé.";
+    bouton.addEventListener("click", evenement => {
+      evenement.stopPropagation();
+      chercherAuMarche(nom, rarete);
+    });
+    bloc.appendChild(bouton);
+    if (lettre) {
+      const toutes = creer("a", "toutes raretés", "wmd-lien-carte");
+      toutes.href = "#";
+      toutes.title = "La même recherche, sans filtre de rareté";
+      toutes.addEventListener("click", evenement => {
+        evenement.preventDefault();
+        evenement.stopPropagation();
+        chercherAuMarche(nom, null);
+      });
+      const details = creer("div", undefined, "wmd-souhait-marche-details");
+      details.append(`${lettre} seulement · `, toutes);
+      bloc.appendChild(details);
+    }
+    cadre.appendChild(bloc);
+  }
 }
 
 // Un bouton du site dont le texte est EXACTEMENT celui-ci (pas seulement « contient »).
@@ -3915,7 +4712,7 @@ function rareteDuCadre(cadre) {
     if (trouve) return trouve[1].toLowerCase();
   }
   for (const element of cadre.querySelectorAll("div, span")) {
-    if (element.children.length === 0 && rareteDepuisLettre(element.textContent.trim())) {
+    if (estPetitBadge(element) && rareteDepuisLettre(element.textContent.trim())) {
       return rareteDepuisLettre(element.textContent.trim());
     }
   }
@@ -3978,18 +4775,33 @@ document.addEventListener("click", evenement => {
 // 1.10 : sur une fiche SANS « Mettre aux enchères » (une carte que tu n'as pas, sur « Toutes les cartes »…),
 // l'encart de prix n'existe pas : on ajoute seulement le bouton « Vérifier si un de mes amis la possède ».
 // 1.16 : et « 🛒 Voir au Marché si elle est en vente » (toutes les fiches, y compris ta liste de souhaits).
-function boutonAmisSurFiche() {
+let amisFicheEnCours = false;
+async function boutonAmisSurFiche() {
+  if (amisFicheEnCours) return;
+  amisFicheEnCours = true;
+  try {
+    await majEncartAmisFiche();
+  } finally {
+    amisFicheEnCours = false;
+  }
+}
+async function majEncartAmisFiche() {
   const titre = [...document.querySelectorAll(".sheet-overlay h2, [role='dialog'] h2")].find(h => !estDansLePanneau(h) && estVisible(h));
   const ancien = document.getElementById("wmd-amis-fiche");
   if (!titre || document.getElementById("wmd-prix-fiche")) { if (ancien) ancien.remove(); return; }
   const fiche = titre.closest(".sheet-overlay, [role='dialog']");
+  // 1.17 : la fiche d'une de TES cartes (« Mettre aux enchères ») a déjà son encart complet, en bas
+  // (afficherPrixDansFiche). Avant, ce petit encart apparaissait aussi en haut, quelques secondes,
+  // le temps que l'encart du bas soit prêt : les mêmes boutons étaient affichés deux fois.
+  const aMoi = [...fiche.querySelectorAll("button")].some(bouton => !estDansLePanneau(bouton) && /mettre aux ench[èe]res/i.test(bouton.textContent));
+  if (aMoi) { if (ancien) ancien.remove(); return; }
   const nom = titre.textContent.trim();
   // La rareté : celle de la carte sur laquelle tu viens de cliquer (même nom), sinon le badge « L », « UR »…
   // de la fiche (jamais les boutons de rareté de l'onglet « Marché »), sinon l'image de fond.
   let rarete = derniereCarteCliquee && memeNom(derniereCarteCliquee.nom, nom) ? derniereCarteCliquee.rarete : null;
   if (!rarete) {
     for (const element of fiche.querySelectorAll("div, span")) {
-      if (element.children.length === 0 && !estDansLePanneau(element) && !element.closest("button")
+      if (estPetitBadge(element) && !estDansLePanneau(element) && !element.closest("button")
         && (rarete = rareteDepuisLettre(element.textContent.trim()))) break;
     }
   }
@@ -4001,10 +4813,19 @@ function boutonAmisSurFiche() {
   if (!nom) { if (ancien) ancien.remove(); return; }
   const cle = `${nom}|${rarete || "?"}`;
   if (ancien && ancien.dataset.cle === cle && fiche.contains(ancien)) return;
-  if (ancien) ancien.remove();
+  // 1.17 : le prix moyen connu et le pic de prix éventuel, aussi pour une carte que tu n'as pas.
+  const groupes = reglages.marche && rarete ? await prixParCarte() : null;
+  const prix = groupes ? groupes.get(cle) : null;
+  const pic = reglages.marche && rarete ? picASignaler(await tendanceDe(nom, rarete)) : null;
+  const deja = document.getElementById("wmd-amis-fiche"); // il a pu être recréé pendant la lecture des prix
+  // Rien n'a changé (par exemple un relevé du Marché qui ne concerne pas cette carte) : l'encart reste tel quel.
+  const signature = JSON.stringify([cle, prix ? [prix.estimation, prix.moyenne, texteMarche(prix)] : null, pic, texteDerniereRechercheAmis()]);
+  if (deja && deja.dataset.signature === signature && fiche.contains(deja)) { deja.dataset.cle = cle; return; }
+  if (deja) deja.remove();
   const encart = creer("div", undefined, "wmd-prix-fiche");
   encart.id = "wmd-amis-fiche";
   encart.dataset.cle = cle;
+  encart.dataset.signature = signature;
   // 1.16 : « 🛒 Voir au Marché si elle est en vente » — sur « Toutes les cartes » (et ta liste de souhaits),
   // la rareté affichée est celle du catalogue : la recherche se fait dans toutes les raretés.
   encart.appendChild(blocVoirAuMarche(nom, rarete, { catalogue: pageActuelle() !== "collection" }));
@@ -4015,6 +4836,9 @@ function boutonAmisSurFiche() {
     bouton.addEventListener("click", () => verifierChezAmis(nom, rarete));
     const blocAmis = creer("div", undefined, "wmd-amis");
     blocAmis.append(bouton, creer("div", texteDerniereRechercheAmis(), "wmd-discret"));
+    if (prix && prix.moyenne) encart.appendChild(creer("b", `Prix moyen du site (${RARETES[rarete].nom}) : ${nombreLisible(prix.estimation)}`));
+    if (prix && texteMarche(prix)) encart.appendChild(creer("div", texteMarche(prix)));
+    if (pic) encart.appendChild(creer("div", textePic(pic), "wmd-alerte-pic"));
     encart.appendChild(blocAmis);
   }
   (titre.parentElement.parentElement || titre.parentElement).after(encart);
@@ -4419,7 +5243,9 @@ async function marquerCartesEstimees() {
       const prix = trouve ? prixEnCache.get(`${nom}|${trouve[1]}`) : null;
       // 1.7.3 : le badge « $461 » = le prix moyen du site seulement. Les prix trouvés au Marché
       // ont leur propre badge, juste en dessous : « -120 / +530 » (le plus bas / le plus haut).
-      const moyenne = prix && prix.moyenne ? nombreLisible(prix.estimation) : null;
+      // 1.17 : « 🎈 » à côté du prix moyen quand il est peut-être gonflé par un pic.
+      const picCarte = trouve && prix && prix.moyenne ? picASignaler(await tendanceDe(nom, trouve[1])) : null;
+      const moyenne = prix && prix.moyenne ? nombreLisible(prix.estimation) + (picCarte ? " 🎈" : "") : null;
       cadre.classList.toggle("wmd-carte-prix", moyenne !== null);
       if (moyenne === null) delete cadre.dataset.wmdBadge;
       else if (cadre.dataset.wmdBadge !== moyenne) cadre.dataset.wmdBadge = moyenne;
@@ -4437,7 +5263,8 @@ async function marquerCartesEstimees() {
         if (badgeMarche.dataset.texte !== marcheTexte) badgeMarche.dataset.texte = marcheTexte;
       }
       if (prix) {
-        const texte = [moyenne !== null ? `Prix moyen du site : ${moyenne}` : "Pas de prix moyen du site relevé",
+        const texte = [moyenne !== null ? `Prix moyen du site : ${nombreLisible(prix.estimation)}` : "Pas de prix moyen du site relevé",
+          picCarte ? textePic(picCarte) : "",
           texteMarche(prix) || (afficherMinMax ? "aucun prix trouvé au Marché" : ""),
           prix.minVendu !== null ? `vendue min ${nombreLisible(prix.minVendu)}` : "pas encore vue vendue"].filter(Boolean).join(" · ");
         if (cadre.dataset.wmdPrix !== texte) {
@@ -4590,6 +5417,7 @@ function couleurAffaire(rapport, seuil) {
 // 1.10 : le cadre du prix le plus haut du Marché est toujours du même bleu, quel que soit l'écart,
 // et blanc quand le « ⚠ » est ajouté (un prix moyen du site est connu : ce prix le plus haut est douteux).
 const COULEUR_MAX = "hsl(212, 95%, 56%)";
+const COULEUR_TRES_BONNE = "hsl(0, 90%, 52%)";  // 1.17 : cadre rouge = « +++ » sous le prix moyen
 const COULEUR_MAX_ATTENTION = "#ffffff";
 
 let annoncesEnCache = null; // les annonces en mémoire, relues seulement quand elles changent
@@ -4602,9 +5430,24 @@ api.storage.onChanged.addListener(changements => {
 
 // Le prix estimé d'une carte, sans compter l'annonce « cleExclue ».
 // Renvoie { estimation, minimum, min, terminees, enCours } ou null.
+// 1.17.1 (optimisation) : les annonces en mémoire rangées par « carte|rareté ». Avant, chaque carte affichée
+// reparcourait TOUTES les annonces en mémoire (des milliers) : 100 cartes × 5 000 annonces à chaque passage.
+const indexAnnonces = { source: null, groupes: new Map() };
+function annoncesDeLaCarte(annonces, nom, rarete) {
+  if (indexAnnonces.source !== annonces) {
+    indexAnnonces.groupes = new Map();
+    for (const entree of annonces) {
+      const cle = `${entree[1].nom}|${entree[1].rarete}`;
+      const groupe = indexAnnonces.groupes.get(cle);
+      if (groupe) groupe.push(entree); else indexAnnonces.groupes.set(cle, [entree]);
+    }
+    indexAnnonces.source = annonces;
+  }
+  return indexAnnonces.groupes.get(`${nom}|${rarete}`) || [];
+}
 function estimationSans(annonces, nom, rarete, cleExclue) {
   const liste = [];
-  for (const [cle, a] of annonces) {
+  for (const [cle, a] of annoncesDeLaCarte(annonces, nom, rarete)) {
     if (cle === cleExclue || a.nom !== nom || a.rarete !== rarete) continue;
     liste.push({ prix: a.prix, terminee: a.terminee, vu: a.vu });
   }
@@ -4644,7 +5487,8 @@ async function majPrixSurEnchere() {
   // 1.16 : la rareté donnée par le site lui-même (reponses-site.js) d'abord, sinon le badge « L », « UR »…
   const duSite = encheresDuSite.get(identifiant);
   const rarete = (duSite && rareteDuSite(duSite.rarete)) || feuilles(zone).map(({ element, texte }) =>
-    !estDeLExtension(element) && element.children.length === 0 ? rareteDepuisLettre(texte) : null).find(Boolean);
+    !estDeLExtension(element) && element.children.length === 0 ? rareteDepuisLettre(texte) : null).find(Boolean)
+    || rareteBadgeShiny(zone);
   if (!nom) return;
   const bloc = titre.parentElement.parentElement; // le titre + « Mis en vente par »
   // 1.16 : relevé des prix coupé dans les réglages : l'encart ne garde que « 🛒 Voir les autres ventes au Marché ».
@@ -4667,7 +5511,8 @@ async function majPrixSurEnchere() {
     moyennesEnCache = marche && marche.moyennes ? marche.moyennes : {};
   }
   const estime = estimationSans(annoncesEnCache, nom, rarete, cleAnnonce);
-  const signature = JSON.stringify([identifiant, nom, rarete, estime, annonce ? [annonce.prix, annonce.terminee] : null, afficherMinMax]);
+  const pic = picASignaler(await tendanceDe(nom, rarete)); // 1.17 : prix peut-être gonflé
+  const signature = JSON.stringify([identifiant, nom, rarete, estime, annonce ? [annonce.prix, annonce.terminee] : null, afficherMinMax, pic]);
   if (ancien && ancien.dataset.signature === signature && ancien.previousElementSibling === bloc) return; // déjà à jour
 
   const encart = ancien || creer("div", undefined, "wmd-prix-fiche wmd-prix-enchere");
@@ -4689,6 +5534,7 @@ async function majPrixSurEnchere() {
     encart.appendChild(creer("b", `Aucun autre prix relevé pour ${nom} en ${nomRarete}.`));
     encart.appendChild(creer("div", "Passez sur le Marché (par exemple avec « Voir les autres ventes au Marché ») pour relever des prix.", "wmd-discret"));
   }
+  if (pic) encart.appendChild(creer("div", textePic(pic), "wmd-alerte-pic"));
   // La même carte vue dans d'autres raretés : à titre indicatif seulement.
   const autres = Object.keys(RARETES).filter(r => r !== rarete)
     .map(r => [r, estimationSans(annoncesEnCache, nom, r, cleAnnonce)]).filter(([, e]) => e)
@@ -4701,6 +5547,21 @@ let affairesEnCours = false;
 const PRIX_VIEUX_MS = 7 * 24 * 60 * 60 * 1000; // 1.16 : au-delà d'une semaine, le cadre porte « 🕒 »
 // 1.16 : « Seulement les enchères encadrées » : les autres sont cachées (classe wmd-pas-encadree).
 let marcheQueEncadrees = false;
+// 1.17.1 : « Masquer les cadres blancs » : un cadre bleu avec « ⚠ » n'est plus affiché du tout.
+let marcheSansBlanc = false;
+api.storage.local.get("marcheSansBlanc").then(({ marcheSansBlanc: valeur }) => {
+  marcheSansBlanc = valeur === true;
+  const coche = document.querySelector("#wmd-case-blanc input");
+  if (coche) coche.checked = marcheSansBlanc;
+  versionPage++;
+}).catch(() => {});
+api.storage.onChanged.addListener(changements => {
+  if (!changements.marcheSansBlanc) return;
+  marcheSansBlanc = changements.marcheSansBlanc.newValue === true;
+  const coche = document.querySelector("#wmd-case-blanc input");
+  if (coche) coche.checked = marcheSansBlanc;
+  versionPage++;
+});
 api.storage.local.get("marcheQueEncadrees").then(({ marcheQueEncadrees: valeur }) => {
   marcheQueEncadrees = valeur === true;
   const coche = document.querySelector("#wmd-case-encadrees input");
@@ -4719,6 +5580,61 @@ function afficherNombreNonEncadrees(actif) {
   const voulu = " Seulement les enchères encadrées"
     + (actif ? ` (${document.querySelectorAll(".wmd-pas-encadree").length} cachée(s))` : "");
   if (texte && texte.textContent !== voulu) texte.textContent = voulu;
+}
+
+// 1.16 : « + », « ++ » ou « +++ » en haut à droite de chaque carte du Marché dont on connaît le prix moyen du site,
+// selon l'écart (en wikibidous) entre la mise et ce prix moyen : vert si la mise est plus basse, rouge si plus haute.
+// Seuils réglables dans « ⚙️ Options du Marché » (100 / 500 / 1000 par défaut).
+const ECARTS_PAR_DEFAUT = [100, 500, 1000];
+let marcheEcarts = { actif: true, seuils: [...ECARTS_PAR_DEFAUT] };
+function lireReglageEcarts(valeur) {
+  const seuils = ECARTS_PAR_DEFAUT.map((defaut, i) => {
+    const n = valeur && Array.isArray(valeur.seuils) ? Number(valeur.seuils[i]) : NaN;
+    return Number.isFinite(n) && n >= 1 ? n : defaut;
+  });
+  return { actif: !valeur || valeur.actif !== false, seuils: seuils };
+}
+function afficherReglageEcarts() {
+  const coche = document.querySelector("#wmd-case-ecarts input[type=checkbox]");
+  if (coche) coche.checked = marcheEcarts.actif;
+  marcheEcarts.seuils.forEach((seuil, i) => {
+    const champ = document.getElementById(`wmd-ecart-${i + 1}`);
+    if (champ && document.activeElement !== champ) champ.value = String(seuil);
+  });
+}
+api.storage.local.get("marcheEcarts").then(({ marcheEcarts: valeur }) => {
+  marcheEcarts = lireReglageEcarts(valeur);
+  afficherReglageEcarts();
+  versionPage++;
+}).catch(() => {});
+api.storage.onChanged.addListener(changements => {
+  if (!changements.marcheEcarts) return;
+  marcheEcarts = lireReglageEcarts(changements.marcheEcarts.newValue);
+  afficherReglageEcarts();
+  versionPage++;
+});
+function afficherEcart(cadre, annonce, moyenne) {
+  let marque = cadre.querySelector(":scope > .wmd-ecart");
+  let niveau = 0;
+  const ecart = moyenne && moyenne.prix > 0 && !annonce.terminee && Number.isFinite(annonce.prix) ? annonce.prix - moyenne.prix : 0;
+  if (marcheEcarts.actif) for (const seuil of marcheEcarts.seuils) if (Math.abs(ecart) >= seuil) niveau++;
+  if (!niveau) {
+    if (marque) marque.remove();
+    cadre.classList.remove("wmd-avec-ecart");
+    return;
+  }
+  const texte = "+".repeat(niveau);
+  const sens = ecart < 0 ? "moins-cher" : "plus-cher";
+  const titre = `Mise ${nombreLisible(annonce.prix)} : ${nombreLisible(Math.abs(ecart))} wikibidous `
+    + (ecart < 0 ? "SOUS" : "AU-DESSUS DU") + ` prix moyen du site (${nombreLisible(moyenne.prix)})`;
+  if (!marque) {
+    marque = creer("span", undefined, "wmd-ecart");
+    cadre.appendChild(marque);
+  }
+  cadre.classList.add("wmd-avec-ecart");
+  if (marque.textContent !== texte) marque.textContent = texte;
+  if (marque.dataset.sens !== sens) marque.dataset.sens = sens;
+  if (marque.title !== titre) marque.title = titre;
 }
 
 // 1.16 : sur une carte encadrée, une flèche et un % dans les coins du bas :
@@ -4745,6 +5661,29 @@ function afficherTendances(cadre, tendance) {
   }
 }
 
+// 1.17 : les petites icônes d'alerte, en haut à gauche de la carte, chacune avec son infobulle :
+// 🕒 vieux prix (ou sans date), ⚠ prix le plus haut du Marché douteux, 🎈 prix peut-être gonflé.
+// Avant, 🕒 et ⚠ étaient collés au début de l'étiquette du cadre, déjà longue.
+function afficherIcones(cadre, icones) {
+  let zone = cadre.querySelector(":scope > .wmd-icones");
+  const signature = JSON.stringify(icones);
+  if (!icones.length) {
+    if (zone) zone.remove();
+    return;
+  }
+  if (zone && zone.dataset.signature === signature) return;
+  if (!zone) {
+    zone = creer("span", undefined, "wmd-icones");
+    cadre.appendChild(zone);
+  }
+  zone.dataset.signature = signature;
+  zone.replaceChildren(...icones.map(({ texte, titre, type }) => {
+    const icone = creer("span", texte, `wmd-icone wmd-icone-${type}`);
+    icone.title = titre;
+    return icone;
+  }));
+}
+
 async function marquerBonnesAffaires() {
   if (affairesEnCours) return;
   const actif = reglages.marche && optionsMarcheActives();
@@ -4755,6 +5694,9 @@ async function marquerBonnesAffaires() {
   if (!actif) {
     for (const element of document.querySelectorAll(".wmd-bonne-affaire")) element.classList.remove("wmd-bonne-affaire");
     for (const element of document.querySelectorAll(".wmd-tendance")) element.remove();
+    for (const element of document.querySelectorAll(".wmd-ecart")) element.remove();
+    for (const element of document.querySelectorAll(".wmd-avec-ecart")) element.classList.remove("wmd-avec-ecart");
+    for (const element of document.querySelectorAll(".wmd-icones")) element.remove(); // 1.17
     afficherNombreNonEncadrees(false);
     return;
   }
@@ -4782,18 +5724,24 @@ async function marquerBonnesAffaires() {
         if (s.mode === "montant") return estimation > 0 ? Math.max(0, 1 - s.valeur / estimation) : -1;
         return 1 - s.valeur / 100;
       };
-      const seuilMoyenne = seuilDe("Moyenne", estime && estime.moyenne ? estime.estimation : 0);
+      // 1.17 : le cadre du prix moyen suit maintenant les seuils « ++ » et « +++ » (écart en wikibidous SOUS le prix moyen) :
+      // JAUNE à partir de « ++ », ROUGE à partir de « +++ ». Le seuil en % / montant du prix moyen n'est plus utilisé.
+      const ecartSous = estime && estime.moyenne && estime.estimation > 0 ? estime.estimation - annonce.prix : 0;
+      const niveauMoyenne = ecartSous >= marcheEcarts.seuils[2] ? 3 : ecartSous >= marcheEcarts.seuils[1] ? 2 : 0;
       const seuilMax = seuilDe("Max", estime ? estime.max : 0);
-      const okMoyenne = rapportMoyen < 1 && rapportMoyen <= seuilMoyenne;
-      const okMax = rapportMax < 1 && rapportMax <= seuilMax;
+      const okMoyenne = rapportMoyen < 1 && niveauMoyenne >= 2;
+      const okMax = rapportMax < 1 && rapportMax <= seuilMax && !(marcheSansBlanc && estime.moyenne); // 1.17.1
       const type = okMoyenne ? "moyenne" : okMax ? "max" : null;
       const affaire = type !== null;
       const rapport = type === "moyenne" ? rapportMoyen : rapportMax;
-      cadre.classList.toggle("wmd-bonne-affaire", affaire);
-      afficherTendances(cadre, affaire ? tendancesEnCache[`${annonce.nom}|${annonce.rarete}`] : null);
-      if (queEncadrees) cadre.classList.toggle("wmd-pas-encadree", !affaire);
+      const tendance = annonce.rarete !== "inconnue" ? tendancesEnCache[`${annonce.nom}|${annonce.rarete}`] : null;
+      const pic = picASignaler(tendance); // 1.17 : prix peut-être gonflé (🎈), sur toutes les cartes
+      const icones = [];
+      if (cadre.classList.contains("wmd-bonne-affaire") !== affaire) cadre.classList.toggle("wmd-bonne-affaire", affaire);
+      afficherTendances(cadre, affaire ? tendance : null);
+      afficherEcart(cadre, annonce, annonce.rarete !== "inconnue" ? moyennesEnCache[`${annonce.nom}|${annonce.rarete}`] : null);
+      if (queEncadrees && cadre.classList.contains("wmd-pas-encadree") === affaire) cadre.classList.toggle("wmd-pas-encadree", !affaire);
       if (affaire) {
-        // 1.7.0 : on ajoute le prix le plus bas auquel la carte a été vue VENDUE (s'il y en a un).
         // 1.7.7 : « ⚠ » si un prix moyen du site est connu mais que seul le cadre bleu (max du Marché) s'applique :
         // ce prix le plus haut est alors probablement trompeur.
         const attention = type === "max" && estime.moyenne;
@@ -4802,25 +5750,38 @@ async function marquerBonnesAffaires() {
         // Un prix sans date (vieux fichier importé, relevé d'avant la 1.16…) a aussi son « 🕒 ».
         const sansDate = !vuBase;
         const vieux = sansDate || Date.now() - vuBase > PRIX_VIEUX_MS;
-        const texte = (vieux ? "🕒 " : "") + (attention ? "⚠ " : "") + `−${Math.round((1 - rapport) * 100)} % · `
+        if (vieux) icones.push({ type: "vieux", texte: "🕒", titre: sansDate ? "🕒 Date du relevé de ce prix inconnue : il a pu changer."
+          : `🕒 Prix relevé le ${new Date(vuBase).toLocaleDateString("fr-FR")}, il y a plus d'une semaine : il a pu changer.` });
+        if (attention) icones.push({ type: "attention", texte: "⚠", titre: `⚠ Le prix moyen du site est ${nombreLisible(estime.estimation)} : `
+          + `le prix le plus haut du Marché (${nombreLisible(estime.max)}) est probablement trompeur.` });
+        // 1.17 : l'étiquette est plus courte (le prix de vente le plus bas est dans l'infobulle) : elle tient dans la carte.
+        const texte = (type === "moyenne" ? "+".repeat(niveauMoyenne) + " " : "") + `−${Math.round((1 - rapport) * 100)} % · `
           + (type === "moyenne" ? `moy. ${nombreLisible(estime.estimation)}` : `max ${nombreLisible(estime.max)}`)
-          + (estime.minVendu !== null ? ` · vendue min ${nombreLisible(estime.minVendu)}` : "");
+          + (type === "moyenne" && pic && pic.dansMoyenne ? " 🎈" : "");
         // La couleur dépend aussi du seuil réglé : elle est recalculée à chaque passage.
-        cadre.style.setProperty("--wmd-couleur-affaire", type === "moyenne" ? couleurAffaire(rapport, seuilMoyenne)
-          : attention ? COULEUR_MAX_ATTENTION : COULEUR_MAX);
-        if (cadre.dataset.wmdAffaire !== texte) {
-          cadre.dataset.wmdAffaire = texte;
-          cadre.title = `${annonce.depart ? "Mise de départ" : "Mise actuelle"} ${nombreLisible(annonce.prix)} : `
-            + `sous l'estimation de l'extension (${texte.toLowerCase()})`
-            + (attention ? `. Attention : le prix moyen du site est ${nombreLisible(estime.estimation)}, le prix le plus haut du Marché est probablement trompeur.` : "")
-            + (sansDate ? ". 🕒 Date du relevé de ce prix inconnue : il a pu changer."
-              : vieux ? `. 🕒 Prix relevé le ${new Date(vuBase).toLocaleDateString("fr-FR")}, il y a plus d'une semaine : il a pu changer.` : "");
-        }
+        // 1.17 : le cadre jaune rougit peu à peu quand l'écart se rapproche du seuil « +++ » (rouge franc à « +++ »).
+        const progression = Math.min(1, Math.max(0, (ecartSous - marcheEcarts.seuils[1]) / Math.max(1, marcheEcarts.seuils[2] - marcheEcarts.seuils[1])));
+        const couleur = type === "moyenne" ? (niveauMoyenne >= 3 ? COULEUR_TRES_BONNE : `hsl(${Math.round(50 - 38 * progression)}, 95%, 52%)`)
+          : attention ? COULEUR_MAX_ATTENTION : COULEUR_MAX;
+        if (cadre.style.getPropertyValue("--wmd-couleur-affaire") !== couleur) cadre.style.setProperty("--wmd-couleur-affaire", couleur);
+        const titre = `${annonce.depart ? "Mise de départ" : "Mise actuelle"} ${nombreLisible(annonce.prix)} : `
+          + (type === "moyenne"
+            ? `${nombreLisible(ecartSous)} wikibidous (${Math.round((1 - rapport) * 100)} %) sous le prix moyen du site (${nombreLisible(estime.estimation)}) : `
+              + (niveauMoyenne >= 3 ? `« +++ », cadre rouge (≥ ${nombreLisible(marcheEcarts.seuils[2])})` : `« ++ », cadre jaune (≥ ${nombreLisible(marcheEcarts.seuils[1])})`)
+            : `${Math.round((1 - rapport) * 100)} % sous le prix le plus haut vu au Marché (${nombreLisible(estime.max)})`)
+          + (estime.minVendu !== null ? `. Vendue au minimum : ${nombreLisible(estime.minVendu)}` : "")
+          + (type === "moyenne" && pic && pic.dansMoyenne && pic.sansPic > 0
+            ? `. 🎈 Ce prix moyen est gonflé par un pic : sans lui ≈ ${nombreLisible(pic.sansPic)} (la mise en fait ${Math.round(annonce.prix / pic.sansPic * 100)} %)` : "")
+          + ". (WikiMasters Doublons)";
+        if (cadre.dataset.wmdAffaire !== texte) cadre.dataset.wmdAffaire = texte;
+        if (cadre.title !== titre) cadre.title = titre;
       } else if (cadre.dataset.wmdAffaire) {
         delete cadre.dataset.wmdAffaire;
         cadre.style.removeProperty("--wmd-couleur-affaire");
         cadre.removeAttribute("title");
       }
+      if (pic) icones.push({ type: "pic", texte: "🎈", titre: textePic(pic) });
+      afficherIcones(cadre, icones);
     }
     afficherNombreNonEncadrees(queEncadrees);
   } finally {
@@ -5191,7 +6152,8 @@ function infosEnchereDetail(identifiant) {
   const zone = document.querySelector("main") || document.body;
   const titre = zone.querySelector("h1");
   const rarete = feuilles(zone).map(({ element, texte }) =>
-    !estDeLExtension(element) && element.children.length === 0 ? rareteDepuisLettre(texte) : null).find(Boolean) || null;
+    !estDeLExtension(element) && element.children.length === 0 ? rareteDepuisLettre(texte) : null).find(Boolean)
+    || rareteBadgeShiny(zone) || null;
   const annonce = lireAnnonceDetail(identifiant)[0];
   return { nom: titre ? titre.textContent.trim() : null, rarete: rarete, prix: annonce ? annonce.prix : null };
 }
@@ -5960,6 +6922,208 @@ async function apprendreIdentite(miennes) {
   if (pseudos.get(id) && pseudos.get(id) !== monPseudo) await noterPseudo(pseudos.get(id));
 }
 
+// ---------------------------------------------------------------------
+//  1.17.3 : REMETTRE EN VENTE LES CARTES INVENDUES (versions complètes seulement)
+//  L'extension note tes ventes (onglet « Mes ventes » du Marché, d'après ce que le site lui envoie) :
+//  la mise de départ, et la durée choisie (lue au moment où tu cliques « Lancer l'enchère », ou
+//  calculée avec le début et la fin de l'enchère). Une vente finie sans aucune mise est « invendue ».
+//  Le bouton « 🔁 Remettre en vente les invendues » (après confirmation) ouvre ta Collection, cherche
+//  chaque carte, clique « Mettre aux enchères », remet la même mise de départ et la même durée,
+//  puis « Lancer l'enchère ». C'est la seule action de l'extension qui crée quelque chose sur le site :
+//  elle ne part jamais toute seule, et s'arrête à la limite d'enchères actives du site (« 4/5 »).
+// ---------------------------------------------------------------------
+const REMISE_EN_VENTE = false; // false dans la version « sans chargement automatique »
+const DUREES_VENTE = [[10, "10 min"], [30, "30 min"], [60, "1 h"], [180, "3 h"], [360, "6 h"], [720, "12 h"]];
+const DUREE_VENTE_INCONNUE = 60; // durée utilisée si celle d'origine n'a pas pu être connue
+function dureeVenteProche(minutes) {
+  if (!(minutes > 0)) return null;
+  return DUREES_VENTE.reduce((meilleure, [m]) => Math.abs(Math.log(m / minutes)) < Math.abs(Math.log(meilleure / minutes)) ? m : meilleure, DUREES_VENTE[0][0]);
+}
+const texteDureeVente = minutes => (DUREES_VENTE.find(([m]) => m === minutes) || [0, `${minutes} min`])[1];
+
+let mesVentes = {};          // id de l'enchère → { nom, rarete, depart, duree, fin, etat, vu }
+let remiseEnVente = null;    // { file: [ids], faites, erreurs, quand } pendant une remise en vente
+api.storage.local.get(["mesVentes", "remiseEnVente"]).then(lu => {
+  mesVentes = lu.mesVentes || {};
+  remiseEnVente = lu.remiseEnVente || null;
+}).catch(() => {});
+api.storage.onChanged.addListener(changements => {
+  if (changements.mesVentes) mesVentes = changements.mesVentes.newValue || {};
+  if (changements.remiseEnVente) remiseEnVente = changements.remiseEnVente.newValue || null;
+});
+
+// Au clic sur « Lancer l'enchère » (le tien ou celui de l'extension) : la mise et la durée choisies.
+function fenetreMiseEnVente() {
+  const titre = [...document.querySelectorAll("h2")].find(h => /^mettre aux ench[èe]res$/i.test(h.textContent.trim()) && !estDansLePanneau(h) && estVisible(h));
+  let zone = titre ? titre.parentElement : null;
+  while (zone && !zone.querySelector('input[aria-label="Mise de départ"]')) zone = zone.parentElement;
+  if (!zone) return null;
+  const nomCarte = zone.querySelector("p.font-semibold") || zone.querySelector("h3");
+  const ligneRarete = [...zone.querySelectorAll("p")].map(p => p.textContent.trim()).find(t => /^march[ée]\s*·\s*/i.test(t));
+  const actives = [...zone.querySelectorAll("p")].map(p => p.textContent.trim().match(/^ench[èe]res actives\s*:\s*(\d+)\s*\/\s*(\d+)/i)).find(Boolean);
+  const boutons = [...zone.querySelectorAll("button")];
+  const dureeChoisie = boutons.find(b => DUREES_VENTE.some(([, t]) => t === b.textContent.trim()) && /bg-\[var\(--color-accent\)\]/.test(b.className));
+  return {
+    zone: zone,
+    nom: nomCarte ? nomCarte.textContent.trim() : null,
+    rarete: ligneRarete ? rareteDepuisNom(ligneRarete.replace(/^march[ée]\s*·\s*/i, "")) : null,
+    champ: zone.querySelector('input[aria-label="Mise de départ"]'),
+    actives: actives ? Number(actives[1]) : null,
+    maxActives: actives ? Number(actives[2]) : null,
+    duree: dureeChoisie ? (DUREES_VENTE.find(([, t]) => t === dureeChoisie.textContent.trim()) || [null])[0] : null,
+    boutonDuree: minutes => boutons.find(b => b.textContent.trim() === texteDureeVente(minutes)) || null,
+    lancer: boutons.find(b => /^lancer l'ench[èe]re$/i.test(b.textContent.trim())) || null,
+    annuler: boutons.find(b => b.textContent.trim() === "Annuler") || null
+  };
+}
+let derniereMiseEnVente = null; // { nom, rarete, depart, duree, quand }
+document.addEventListener("click", evenement => {
+  const bouton = evenement.target instanceof Element ? evenement.target.closest("button") : null;
+  if (!REMISE_EN_VENTE || !bouton || !/^lancer l'ench[èe]re$/i.test(bouton.textContent.trim())) return;
+  const fenetre = fenetreMiseEnVente();
+  if (!fenetre || !fenetre.nom) return;
+  derniereMiseEnVente = { nom: fenetre.nom, rarete: fenetre.rarete, depart: lirePrix(fenetre.champ.value), duree: fenetre.duree, quand: Date.now() };
+  api.storage.local.set({ derniereMiseEnVente: derniereMiseEnVente }).catch(() => {});
+}, true);
+
+// Les enchères reçues du site dont tu es le vendeur : rangées dans « mesVentes ».
+async function noterMesVentes(encheres) {
+  if (!REMISE_EN_VENTE || !monId) return;
+  const miennes = encheres.filter(e => e.vendeurId === monId && e.nom && e.fin);
+  if (!miennes.length) return;
+  const { mesVentes: memo = {}, derniereMiseEnVente: derniere } = await api.storage.local.get(["mesVentes", "derniereMiseEnVente"]);
+  const maintenant = Date.now();
+  let change = false;
+  for (const e of miennes) {
+    const ancienne = memo[e.id] || {};
+    let duree = ancienne.duree || dureeVenteProche(e.dureeMin) || (e.debut ? dureeVenteProche((e.fin - e.debut) / MINUTE) : null);
+    // La mise en vente vue au clic : même carte, même mise de départ, fin ≈ clic + durée.
+    if (!duree && derniere && derniere.duree && memeNom(derniere.nom, e.nom) && derniere.depart === e.depart
+      && Math.abs(e.fin - (derniere.quand + derniere.duree * MINUTE)) < 5 * MINUTE) duree = derniere.duree;
+    const vendue = Boolean(e.gagnantId) || e.prixFinal > 0 || e.mise > 0;
+    const finie = e.statut !== "active" || e.fin < maintenant - 30 * SECONDE;
+    const etat = vendue ? (finie ? "vendue" : "active") : finie ? (ancienne.etat === "remise" ? "remise" : "invendue") : "active";
+    const nouvelle = { nom: e.nom, rarete: rareteDuSite(e.rarete) || ancienne.rarete || "inconnue", depart: e.depart, duree: duree || null,
+      fin: e.fin, etat: etat, vu: maintenant };
+    if (JSON.stringify({ ...ancienne, vu: 0 }) !== JSON.stringify({ ...nouvelle, vu: 0 })) change = true;
+    memo[e.id] = nouvelle;
+  }
+  // Une invendue que tu as déjà remise en vente toi-même (même carte, enchère plus récente) n'est plus proposée.
+  for (const v of Object.values(memo)) {
+    if (v.etat === "invendue" && Object.values(memo).some(w => w !== v && w.fin > v.fin && w.nom === v.nom && w.rarete === v.rarete)) { v.etat = "remise"; change = true; }
+  }
+  for (const [id, v] of Object.entries(memo)) if (maintenant - v.fin > 14 * 24 * 3600 * 1000) { delete memo[id]; change = true; }
+  if (change) await api.storage.local.set({ mesVentes: memo });
+}
+
+function ventesInvendues() {
+  return Object.entries(mesVentes).filter(([, v]) => v.etat === "invendue" && v.depart > 0 && RARETES[v.rarete])
+    .sort((a, b) => a[1].fin - b[1].fin);
+}
+
+// Le bouton du panneau : lancer (après confirmation) ou arrêter.
+async function boutonRemiseEnVente() {
+  if (remiseEnVente) {
+    await api.storage.local.remove("remiseEnVente");
+    remiseEnVente = null;
+    afficherStatut("🔁 Remise en vente arrêtée.");
+    return;
+  }
+  const liste = ventesInvendues();
+  if (!liste.length) return afficherStatut("🔁 Aucune carte invendue connue. Ouvre l'onglet « Mes ventes » ou « Historique » du Marché.");
+  // 1.17.4 : sans confirmation (demandé) : le clic lance directement ; le même bouton l'arrête.
+  const inconnues = liste.filter(([, v]) => !v.duree).length;
+  afficherStatut(`🔁 Remise en vente de ${liste.length} carte(s) invendue(s), même mise de départ et même durée`
+    + (inconnues ? ` (${inconnues} à durée d'origine inconnue : ${texteDureeVente(DUREE_VENTE_INCONNUE)})` : "") + "…");
+  remiseEnVente = { file: liste.map(([id]) => id), faites: 0, erreurs: [], quand: Date.now() };
+  await api.storage.local.set({ remiseEnVente: remiseEnVente });
+  if (pageActuelle() !== "collection") location.assign(ADRESSES_PAGES.collection);
+}
+
+// Sur la Collection, une carte à la fois. Tourne toutes les secondes, ne fait rien sans remise en cours.
+let remiseOccupee = false;
+async function poursuivreRemiseEnVente() {
+  if (!REMISE_EN_VENTE || !remiseEnVente || remiseOccupee || pageActuelle() !== "collection" || pageOccupee() || carteATrouverEnCours) return;
+  if (Date.now() - remiseEnVente.quand > 30 * MINUTE) { await api.storage.local.remove("remiseEnVente"); return; }
+  if (!champDeRecherche()) return; // la page se charge encore
+  remiseOccupee = true;
+  const finir = async texte => {
+    await api.storage.local.remove("remiseEnVente");
+    remiseEnVente = null;
+    afficherStatut(texte);
+  };
+  try {
+    const etat = remiseEnVente;
+    const id = etat.file[0];
+    if (!id) {
+      return finir(`🔁 Remise en vente terminée : ${etat.faites} carte(s) remise(s) aux enchères`
+        + (etat.erreurs.length ? ` ; pas remises : ${etat.erreurs.join(" ; ")}.` : "."));
+    }
+    const v = mesVentes[id];
+    const suivante = async (reussie, erreur) => {
+      if (!remiseEnVente) return; // Stop pendant ce temps
+      if (reussie) {
+        etat.faites++;
+        const { mesVentes: memo = {} } = await api.storage.local.get("mesVentes");
+        if (memo[id]) { memo[id].etat = "remise"; await api.storage.local.set({ mesVentes: memo }); }
+      } else if (erreur) etat.erreurs.push(erreur);
+      etat.file.shift();
+      etat.quand = Date.now();
+      await api.storage.local.set({ remiseEnVente: etat });
+    };
+    if (!v || v.etat !== "invendue") return suivante(false, null);
+    const reste = etat.file.length;
+    afficherStatut(`🔁 Remise en vente (${reste} restante(s)) : recherche de « ${v.nom} »…`);
+    await chercherEtOuvrirIci({ ou: "collection", nom: v.nom, rarete: v.rarete, rareteSouple: false, quand: Date.now() });
+    // La fiche de la carte, avec son bouton « Mettre aux enchères » (clic voulu : c'est la remise en vente demandée).
+    const boutonFiche = await attendre(() => [...document.querySelectorAll("button")].find(b => !estDansLePanneau(b) && estVisible(b)
+      && /^mettre aux ench[èe]res$/i.test(b.textContent.trim()) && (() => {
+        let fiche = b.parentElement;
+        while (fiche && !fiche.querySelector("h2")) fiche = fiche.parentElement;
+        return fiche && memeNom(fiche.querySelector("h2").textContent.trim(), v.nom);
+      })()), 8000);
+    if (!remiseEnVente) return;
+    if (!boutonFiche) return suivante(false, `${v.nom} (introuvable dans ta collection en ${lettreRarete(v.rarete)})`);
+    boutonFiche.click();
+    const fenetre = await attendre(() => { const f = fenetreMiseEnVente(); return f && f.champ && f.lancer ? f : null; }, 8000);
+    if (!fenetre) return suivante(false, `${v.nom} (la fenêtre « Mettre aux enchères » ne s'est pas ouverte)`);
+    if (fenetre.rarete && fenetre.rarete !== v.rarete) {
+      if (fenetre.annuler) fenetre.annuler.click();
+      return suivante(false, `${v.nom} (la fiche ouverte est en ${lettreRarete(fenetre.rarete)}, pas en ${lettreRarete(v.rarete)})`);
+    }
+    if (fenetre.actives !== null && fenetre.maxActives !== null && fenetre.actives >= fenetre.maxActives) {
+      if (fenetre.annuler) fenetre.annuler.click();
+      return finir(`🔁 Limite du site atteinte (${fenetre.actives}/${fenetre.maxActives} enchères actives) : ${etat.faites} carte(s) remise(s), `
+        + `${etat.file.length} en attente. Relance quand une vente sera finie.`);
+    }
+    ecrireDansChamp(fenetre.champ, String(v.depart));
+    fenetre.champ.dispatchEvent(new Event("change", { bubbles: true }));
+    const duree = v.duree || DUREE_VENTE_INCONNUE;
+    await pause(300);
+    const boutonDuree = fenetreMiseEnVente() && fenetreMiseEnVente().boutonDuree(duree);
+    if (boutonDuree) boutonDuree.click();
+    await pause(400);
+    const verifiee = fenetreMiseEnVente();
+    if (!verifiee || lirePrix(verifiee.champ.value) !== v.depart || verifiee.duree !== duree || !verifiee.lancer || verifiee.lancer.disabled) {
+      if (verifiee && verifiee.annuler) verifiee.annuler.click();
+      return suivante(false, `${v.nom} (mise de départ ou durée impossible à régler)`);
+    }
+    if (!remiseEnVente) { if (verifiee.annuler) verifiee.annuler.click(); return; }
+    verifiee.lancer.click();
+    const fermee = await attendre(() => !fenetreMiseEnVente(), 8000);
+    if (!fermee) {
+      const encore = fenetreMiseEnVente();
+      if (encore && encore.annuler) encore.annuler.click();
+      return suivante(false, `${v.nom} (le site n'a pas accepté la mise en vente)`);
+    }
+    await suivante(true);
+    afficherStatut(`🔁 « ${v.nom} » remise aux enchères : ${nombreLisible(v.depart)}, ${texteDureeVente(duree)}.`);
+    await pause(2000 + Math.random() * 1500); // un rythme humain entre deux cartes
+  } finally {
+    remiseOccupee = false;
+  }
+}
+
 async function recevoirReponseSite(donnees) {
   const maintenant = Date.now();
   const miennes = donnees.miennes || {};
@@ -5980,6 +7144,7 @@ async function recevoirReponseSite(donnees) {
   }
 
   await apprendreIdentite(miennes);
+  await noterMesVentes([...toutes.values()]); // 1.17.3 : les ventes invendues, à remettre en vente
   // La page d'une enchère où tu mènes donne aussi ton pseudo.
   if (monId && donnees.enchere && donnees.enchere.meneurId === monId && donnees.enchere.meneur) await noterPseudo(donnees.enchere.meneur);
 
@@ -6423,9 +7588,16 @@ function boucle(fonction, ms) {
 // ---------------------------------------------------------------------
 const OPTIMISATION = { relectureMaxMs: 10000 };
 const estDeNous = n => n.nodeType === 1 && (/^wmd-/.test(n.id || "") || /(^|\s)wmd-/.test(typeof n.className === "string" ? n.className : ""));
+// 1.17.1 (optimisation) : les comptes à rebours du Marché (« 59m 31s », « 5h 59m ») changent chaque seconde
+// sur chaque carte. Avant, cela faisait relire toute la page à ~20 boucles chaque seconde. Ces changements
+// ne sont plus comptés : rien d'autre ne change sur la carte (le prix, la rareté, le nom restent les mêmes).
+const REGEX_MINUTEUR = /^\s*(?:\d+\s*(?:j|h|min|m|s)\s*)+$/i;
+const estMinuteur = n => n.nodeType === 3 ? REGEX_MINUTEUR.test(n.nodeValue || "")
+  : n.nodeType === 1 && n.childElementCount === 0 && REGEX_MINUTEUR.test(n.textContent || "");
 function changementDuSite(mutation) {
   const cible = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
   if (!cible) return true;
+  if (mutation.type === "characterData" && REGEX_MINUTEUR.test(mutation.target.nodeValue || "")) return false;
   if (cible.closest("#wmd-panneau, .wmd-prix-fiche, #wmd-suivi-enchere, #wmd-amis-fiche, .wmd-badge-achat, .wmd-badge-marche, .wmd-badge-etiquettes, #wmd-alerte-amis, #wmd-aide-prixmax")) return false;
   if (mutation.type === "attributes") {
     const nom = mutation.attributeName || "";
@@ -6439,6 +7611,7 @@ function changementDuSite(mutation) {
   if (mutation.type === "childList") {
     const noeuds = [...mutation.addedNodes, ...mutation.removedNodes];
     if (noeuds.length && noeuds.every(estDeNous)) return false;
+    if (noeuds.length && noeuds.every(estMinuteur)) return false; // 1.17.1 : un compte à rebours réécrit
   }
   return true;
 }
@@ -6447,11 +7620,13 @@ function changementDuSite(mutation) {
 // Appelée directement par l'observateur (avant que le navigateur n'affiche la page) : aucune image de trop.
 let filtresEnCours = false;
 function planifierFiltresMarche() {
-  if (filtresEnCours || !(filtrePrixMax.actif || marcheBientotFini) || !extensionValide()) return;
+  const raretesAuto = autoMarche.actif && autoMarche.raretes.length > 1;
+  if (filtresEnCours || !(filtrePrixMax.actif || marcheBientotFini || raretesAuto) || !extensionValide()) return;
   filtresEnCours = true;
   try {
-    filtrerEncheresTropCheres();
-    filtrerEncheresBientotFinies();
+    if (filtrePrixMax.actif) filtrerEncheresTropCheres();
+    if (marcheBientotFini) filtrerEncheresBientotFinies();
+    if (raretesAuto) filtrerRaretesAuto(); // 1.17
   } catch (erreur) {
     console.warn("[WikiMasters Doublons]", erreur);
   } finally {
@@ -6467,6 +7642,28 @@ api.storage.onChanged.addListener(() => { versionPage++; });
 window.addEventListener("popstate", () => { versionPage++; });
 
 // Comme boucle(), mais la fonction ne tourne que si la page a changé depuis son dernier passage.
+// 1.17.3 : une pastille rouge à côté de la croix « Fermer » de la fiche d'une carte, onglet « Marché »
+// (« Évolution des prix ») : l'extension a bien reçu et enregistré l'historique des prix de CETTE carte.
+// Tu peux fermer la fiche : les prix moyens et les variations de la carte sont à jour.
+let historiqueEnregistre = null; // { nom, quand }
+function pastilleHistorique() {
+  const titre = [...document.querySelectorAll("h3")].find(h => /^[ée]volution des prix$/i.test(h.textContent.trim()) && !estDeLExtension(h));
+  let fiche = titre ? titre.parentElement : null;
+  while (fiche && !fiche.querySelector('button[aria-label="Fermer"]')) fiche = fiche.parentElement;
+  const fermer = fiche ? fiche.querySelector('button[aria-label="Fermer"]') : null;
+  const nom = fiche && fiche.querySelector("h2") ? fiche.querySelector("h2").textContent.trim() : null;
+  const voulu = !!(fermer && nom && reglages.marche && historiqueEnregistre && memeNom(historiqueEnregistre.nom, nom));
+  for (const ancienne of document.querySelectorAll(".wmd-pastille-historique")) {
+    if (!voulu || ancienne.parentElement !== fermer) ancienne.remove();
+  }
+  if (!voulu || fermer.querySelector(".wmd-pastille-historique")) return;
+  const pastille = creer("span", undefined, "wmd-pastille-historique");
+  pastille.setAttribute("aria-hidden", "true");
+  fermer.title = `Prix de « ${nom} » enregistrés par l'extension (${new Date(historiqueEnregistre.quand).toLocaleTimeString("fr-FR")}) : tu peux fermer.`;
+  if (getComputedStyle(fermer).position === "static") fermer.style.position = "relative";
+  fermer.appendChild(pastille);
+}
+
 function boucleSiChangement(fonction, ms) {
   let derniereVersion = -1, dernierPassage = 0, derniereAdresse = "";
   boucle(() => {
@@ -6487,6 +7684,40 @@ boucle(() => {
   actualiserPanneau();
 }, 2000);
 
+// 1.17.5 : LES PRIX DU MARCHÉ OFFERTS AVEC L'EXTENSION (fichier « prix-marche-wikimasters.csv »).
+// Une fois par version de l'extension (à l'installation, puis après chaque mise à jour), le fichier
+// livré avec elle est ajouté aux prix, exactement comme avec « 📥 Importer un fichier CSV » : seulement
+// ce qui manque, ou ce qui est daté d'un jour plus récent. Tes propres relevés ne sont jamais écrasés
+// par un prix plus ancien. Un seul onglet s'en charge. Rien n'est envoyé ni demandé au site.
+const PRIX_OFFERTS_VERROU_MS = 2 * 60 * 1000;
+async function chargerPrixOfferts() {
+  const version = api.runtime.getManifest().version;
+  const lu = await api.storage.local.get(["prixOffertsCharges", "prixOffertsEnCours"]);
+  if (lu.prixOffertsCharges === version) return;
+  if (lu.prixOffertsEnCours && Date.now() - lu.prixOffertsEnCours < PRIX_OFFERTS_VERROU_MS) return; // un autre onglet s'en occupe
+  await api.storage.local.set({ prixOffertsEnCours: Date.now() });
+  try {
+    const reponse = await api.runtime.sendMessage({ type: "prix-offerts-lire" });
+    if (!reponse || reponse.erreur || !reponse.texte) {
+      console.log("[WikiMasters Doublons] Prix offerts non chargés :", reponse ? reponse.erreur : "pas de réponse");
+      return; // réessayé à la prochaine page
+    }
+    afficherStatut("🎁 Ajout des prix du marché offerts avec l'extension…");
+    try {
+      await importerTexteCSV("les prix offerts avec l'extension", reponse.texte, true);
+    } catch (erreur) {
+      afficherStatut(`🎁 Prix offerts : ajout impossible (${erreur.message || erreur}). Tu peux réessayer avec « 📥 Importer un fichier CSV ».`);
+    }
+    // Tenté une fois pour cette version, même en cas d'échec (pas de nouvel essai à chaque page).
+    await api.storage.local.set({ prixOffertsCharges: version });
+  } finally {
+    await api.storage.local.remove("prixOffertsEnCours").catch(() => {});
+  }
+}
+setTimeout(() => {
+  chargerPrixOfferts().catch(erreur => console.log("[WikiMasters Doublons] Prix offerts :", erreur));
+}, 3000);
+
 // Les boucles qui relisent la page : seulement quand elle a changé (1.10).
 boucleSiChangement(surlignerCartesAnimees, 1500); // les cadres dorés
 boucleSiChangement(surveillerTotaux, 5000);       // les totaux de « Toutes les cartes »
@@ -6502,10 +7733,14 @@ boucleSiChangement(marquerBonnesAffaires, 2000);
 boucleSiChangement(() => { if (optionsMarcheActives() !== ongletOptionsVu) actualiserPanneau(); }, 700);
 boucleSiChangement(appliquerMarcheCompact, 700);  // 1.13 : l'affichage allégé du Marché
 boucleSiChangement(filtrerEncheresBientotFinies, 1000); // 1.14 : seulement les enchères qui finissent bientôt
+// 1.17.1 : les comptes à rebours ne réveillent plus les boucles : ce filtre-là, qui en dépend, repasse toutes les 3 s.
+boucle(() => { if (marcheBientotFini && !document.hidden) filtrerEncheresBientotFinies(); }, 3000);
 boucleSiChangement(filtrerEncheresTropCheres, 1000);    // 1.14 : seulement les mises jusqu'à un montant  // nouveau en 1.6.1 : le cadre des bonnes affaires
 boucleSiChangement(filtrerEncheresAuDessusMoyenne, 1000); // 1.16 : cacher les cartes au-dessus du prix moyen
 boucleSiChangement(releverPrixMoyen, 1500);       // nouveau en 1.7.2 : le prix moyen affiché par le site
+boucleSiChangement(pastilleHistorique, 700);      // 1.17.3 : pastille rouge « historique des prix enregistré »
 boucleSiChangement(afficherPrixSurEnchere, 1500); // nouveau en 1.6.4 : l'estimation sur la page d'une enchère
+boucleSiChangement(boutonsMarcheSouhaitsGuilde, 1500); // « 🛒 Chercher au Marché » sous les souhaits de la guilde
 boucleSiChangement(surveillerEncheresListe, 3000); // nouveau en 1.8 : les enchères suivies sur la liste du Marché
 boucleSiChangement(apprendrePseudo, 2000);        // nouveau en 1.8 : ton pseudo, lu sur ta page Profil
 boucleSiChangement(marquerEtiquettes, 1500);      // 1.9 : le badge d'étiquette suggérée de chaque carte (Collection)
@@ -6521,5 +7756,15 @@ boucle(appliquerCarteATrouver, 700);      // 1.11 : trouver une carte cliquée d
 boucle(surveillerStop, 500);              // nouveau en 1.7.4 : Stop visible seulement pendant une tâche
 boucle(appliquerEchangeEnAttente, 1000);  // nouveau en 1.5 : le bouton « Échanger » d'un résultat
 boucle(surveillerEnchere, 1000);          // nouveau en 1.8 : la fin de l'enchère affichée et l'encart « 🔔 »
+boucle(poursuivreRemiseEnVente, 1000);     // 1.17.3 : la remise en vente des invendues (si demandée)
+boucle(() => { // 1.17.3 : le texte du bouton (nombre d'invendues, ou « Arrêter » pendant la remise)
+  const bouton = document.getElementById("wmd-remise");
+  if (!bouton) return;
+  const voulu = remiseEnVente ? `⏹ Arrêter la remise en vente (${remiseEnVente.file.length} restante(s))`
+    : `🔁 Remettre en vente les invendues (${ventesInvendues().length})`;
+  if (bouton.textContent !== voulu) bouton.textContent = voulu;
+}, 1000);
 boucle(rafraichirEncheresSuivies, 1000);  // 1.15 : le temps restant défile dans « 🔔 Mes enchères suivies »
+// (version sans chargement automatique) boucle(boucleAutoMarche, 250);            // 1.17 : le chargement automatique du Marché (si activé), au quart de seconde près
+// (version sans chargement automatique) boucleSiChangement(filtrerRaretesAuto, 1000); // 1.17 : plusieurs raretés choisies : les autres sont cachées
 console.log("[WikiMasters Doublons] Extension chargée !");

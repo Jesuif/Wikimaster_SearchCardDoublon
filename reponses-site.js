@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.16.0 - reponses-site.js
+//  WikiMasters Doublons 1.17.5 (sans chargement automatique) - reponses-site.js
 //  Nouveau en 1.15 : ce petit script tourne DANS la page du site (et non à côté,
 //  comme content.js). Il regarde les réponses que le site reçoit déjà pour son
 //  Marché (/api/marketplace…) : la liste des enchères, la page d'une enchère et
@@ -30,6 +30,10 @@
     const regle = typeof a.settled_at === "string" ? Date.parse(a.settled_at) : NaN;
     return {
       regle: Number.isFinite(regle) ? regle : null, // l'heure où l'enchère a été soldée (fin réelle)
+      // 1.17.3 : le début de l'enchère (pour retrouver sa durée et la remettre en vente à l'identique).
+      debut: ["created_at", "start_at", "started_at", "starts_at", "listed_at"].map(k => typeof a[k] === "string" ? Date.parse(a[k]) : NaN).find(Number.isFinite) || null,
+      dureeMin: ["duration_minutes", "duration_mins"].map(k => nombre(a[k])).find(v => v !== null)
+        ?? (nombre(a.duration_hours) !== null ? nombre(a.duration_hours) * 60 : null),
       id: a.id.toLowerCase(),
       fin: Number.isFinite(fin) ? fin : null,
       statut: typeof a.status === "string" ? a.status : null,
