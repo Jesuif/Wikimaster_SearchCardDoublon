@@ -8,13 +8,6 @@ Les nouveautés de chaque version, de la plus récente à la plus ancienne. La l
 - Chrome : permission « stockage illimité », pour que les prix offerts et vos relevés tiennent sans la limite de taille habituelle.
 - Firefox : la version Firefox reprend le même code que la version Chrome, et un fichier `.xpi` signé par Mozilla est disponible dans ce dépôt.
 
-## 1.17.4
-
-- **🔁 Remettre en vente les invendues** (groupe « 👥 Amis et enchères », sur le Marché et la Collection) : l'extension note tes ventes (onglets « Mes ventes » et « Historique » du Marché) avec leur mise de départ et leur durée. Une vente finie sans aucune mise est « invendue ». Le bouton affiche leur nombre ; un clic montre la liste, puis, après ta confirmation, l'extension ouvre ta Collection dans l'onglet, cherche chaque carte, clique « Mettre aux enchères », remet **la même mise de départ et la même durée**, puis « Lancer l'enchère », une carte toutes les 2 à 3,5 s.
-  - La durée est lue quand tu cliques « Lancer l'enchère » (sur le site ou par l'extension) ; si elle n'a pas pu être connue (vente lancée avant la 1.17.4), c'est 1 h, et la liste de confirmation le dit.
-  - Elle s'arrête à la limite d'enchères actives du site (« 5/5 »), si la carte n'est plus dans ta collection, ou si la fiche ouverte n'est pas de la bonne rareté. Le même bouton devient « ⏹ Arrêter la remise en vente » pendant qu'elle tourne.
-  - C'est la seule fonction qui crée quelque chose sur le site à ta place : elle ne part jamais toute seule. Elle n'existe pas dans la version « sans chargement automatique ».
-
 ## 1.17.3
 
 - **Pastille rouge sur la fiche d'une carte** : dans l'onglet « Marché » de la fiche (« Évolution des prix »), une pastille rouge apparaît à gauche de la croix de fermeture dès que l'extension a reçu et enregistré l'historique des prix de cette carte (prix moyens et variations). Tu peux alors fermer la fiche : la carte est à jour.
@@ -29,7 +22,6 @@ Les nouveautés de chaque version, de la plus récente à la plus ancienne. La l
   - une annonce déjà enregistrée et inchangée n'est plus réécrite en mémoire à chaque passage.
 - **Mise à jour des prix partagés plus rapide** :
   - l'import du fichier commun ne relit plus toute la mémoire pour chaque carte, et ne réécrit rien s'il n'apporte rien de nouveau ;
-  - en automatique (☁️ du chargement automatique), si tes prix n'ont pas changé depuis le dernier envoi, le fichier n'est pas renvoyé (il l'est quand même au moins toutes les 6 heures ; le bouton envoie toujours).
 
 ## 1.17.1
 
@@ -41,7 +33,7 @@ Les nouveautés de chaque version, de la plus récente à la plus ancienne. La l
   - La barre de titre a trois petits boutons, visibles même panneau réduit : **📋** (mes listes), **⚙️** (réglages et notifications) et **− / +** (réduire / agrandir ; un clic sur le titre du panneau réduit l'agrandit aussi).
   - Le **statut** (ce qui se passe) est tout en haut, avec **⏹ Stop** et **▶ Reprendre la lecture** juste dessous quand ils servent.
   - Les boutons sont **rangés par groupes** : « Sur cette page », « Prix », « Fichiers », « Amis et enchères ». Seuls les groupes utiles sur la page affichée apparaissent.
-  - « ⚙️ Options du Marché » est divisé en quatre sous-menus repliables (ouverts ou fermés, ton choix est gardé) : **🖼 Cadres et repères**, **🔎 Filtres**, **🤖 Chargement automatique** et **❔ Légende** (ce que veut dire chaque cadre, couleur et icône).
+  - « ⚙️ Options du Marché » est divisé en trois sous-menus repliables (ouverts ou fermés, ton choix est gardé) : **🖼 Cadres et repères**, **🔎 Filtres** et **❔ Légende** (ce que veut dire chaque cadre, couleur et icône).
   - La page des réglages a un **sommaire** en haut, qui reste visible quand on fait défiler.
 - **Nouvelles règles des cadres du prix moyen** : le cadre **jaune** s'applique aux cartes notées **« ++ » en vert** (mise sous le prix moyen d'au moins le seuil « ++ », 500 par défaut), le cadre **rouge** à celles notées **« +++ » en vert** (seuil « +++ », 1 000 par défaut). Entre les deux, le cadre jaune **rougit peu à peu** à mesure que l'écart se rapproche du seuil « +++ ». Une carte plus chère que le prix moyen (« ++ » ou « +++ » en rouge) n'est jamais encadrée. Les trois seuils se règlent dans « 🖼 Cadres et repères » (pastilles + / ++ jaune / +++ rouge) ; l'ancien seuil en % ou en montant du cadre jaune → rouge est supprimé. La case « Afficher + / ++ / +++ » ne cache que les repères en haut à droite, pas les cadres. Le cadre bleu (prix le plus haut du Marché) ne change pas.
 - **Cadres du Marché plus lisibles.** L'étiquette du cadre est plus courte (« −40 % · moy. 461 ») et tient dans la carte ; le détail (prix de vente le plus bas, etc.) est dans l'infobulle. Les alertes ont maintenant chacune **leur pastille ronde, sur le bord gauche de la carte**, avec sa propre infobulle : **🕒** prix ancien ou sans date, **⚠** prix le plus haut du Marché douteux, **🎈** prix peut-être gonflé.
@@ -50,10 +42,9 @@ Les nouveautés de chaque version, de la plus récente à la plus ancienne. La l
   - dans la **fiche** de la carte (la tienne ou non) et sur la **page d'une enchère** : « 🎈 Prix peut-être gonflé : la semaine du 09/11, 3 ventes à 900 en moyenne, soit × 2,6 le prix habituel (≈ 340). Le prix est retombé depuis. Sans ce pic, le prix moyen serait d'environ 360. » ;
   - sur la **Collection**, à côté du prix moyen du badge « $ ».
   - L'information voyage avec le fichier des prix partagés (nouvelle colonne « Pic de prix »). Pour que le script Google la garde avec les variations, remplacez son code par le nouveau `script-google-prix-partages.gs` (Déployer → Gérer les déploiements → modifier → Nouvelle version) ; sans cela, elle passe quand même.
-- **🤖 Chargement automatique du Marché** (désactivé par défaut, dans « ⚙️ Options du Marché ») : sur l'onglet « Parcourir », l'extension choisit le **tri** (récemment listées, mise la plus haute, mise la plus basse, fin imminente) et les **raretés** voulues, puis clique sur « Charger la suite » **toutes les 2 à 3 secondes, au hasard**, jusqu'à la fin de la liste ou au nombre maximum de chargements choisi (100 par défaut). Option : **recharger la page toutes les X minutes** pour repartir de zéro et relever les nouvelles annonces. Autre option : **« ☁️ Mettre à jour les prix partagés » toutes les X minutes** (30 par défaut, 5 au minimum), comme le bouton du même nom ; l'heure de la dernière mise à jour est gardée, donc elle n'est pas refaite à chaque rechargement de la page ni par un autre onglet. Une rareté cochée : le filtre du site est utilisé ; plusieurs : les autres raretés sont cachées par l'extension ; aucune : toutes. Pause automatique quand une fiche est ouverte ou que tu écris dans un champ. Le panneau affiche l'état (chargements faits, prochain chargement, prochain rechargement). **Chaque chargement est une requête au site : c'est de l'automatisation, voir « Risques ».**
 - **Corrigé : encadré en double dans la fiche d'une de tes cartes.** « Voir au Marché » et « Vérifier si un de mes amis la possède » apparaissaient quelques secondes en haut de l'onglet « Détails », en plus de l'encadré du bas.
 - **Corrigé : cartes du Marché encadrées qui disparaissent.** Plusieurs parties de l'extension (relevé du Marché toutes les 3 s, prix moyen d'une fiche, import, « ☁️ Mettre à jour les prix », autres onglets) réécrivaient la mémoire des prix en même temps : l'une pouvait remettre une copie dépassée et effacer les prix que l'autre venait d'ajouter. Les modifications passent maintenant l'une après l'autre (et entre onglets quand le navigateur le permet).
-- Sur le Marché, le tableau « 🛒 Mises de cette page » s'arrête à 150 cartes (avec le chargement automatique, la page peut en compter des milliers).
+- Sur le Marché, le tableau « 🛒 Mises de cette page » s'arrête à 150 cartes.
 
 ## 1.16.0
 
