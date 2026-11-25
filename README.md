@@ -11,7 +11,7 @@ Une extension gratuite pour [wiki-masters.com](https://www.wiki-masters.com/) : 
 | **Google Chrome** (111 ou plus récent) | ce dépôt : bouton vert **Code** → **Download ZIP** | [voir plus bas](#installation-sur-google-chrome) |
 | **Mozilla Firefox** (140 ou plus récent) | **[WikiMasters-Doublons-Firefox.xpi](https://github.com/Jesuif/Wikimaster_SearchCardDoublon/raw/main/WikiMasters-Doublons-Firefox.xpi)** (fichier signé par Mozilla) | [voir plus bas](#installation-sur-mozilla-firefox) |
 
-Version actuelle : **1.17.5**, sans chargement automatique (voir [l'historique des versions](CHANGELOG.md)).
+Version actuelle : **1.17.5** (voir [l'historique des versions](CHANGELOG.md)).
 
 ## 🎁 Prix du Marché offerts
 
@@ -82,7 +82,7 @@ L'extension ajoute sur le site un panneau flottant (réduit au départ, avec les
 
 ### Ce que l'extension ne fait pas
 
-Elle **n'ouvre aucun paquet**, n'achète rien, ne mise pas, n'échange rien et ne vend rien. Elle ignore volontairement tout bouton payant. Cette version est **sans chargement automatique** : pas de « Charger la suite » automatique du Marché, pas de rechargement de la page toutes les X minutes, pas de mise à jour automatique du fichier partagé (le bouton ☁️ reste là), pas de remise en vente automatique des cartes invendues.
+Elle **n'ouvre aucun paquet**, n'achète rien, ne mise pas, n'échange rien et ne vend rien. Elle ignore volontairement tout bouton payant.
 
 ## Risques : à lire absolument
 
