@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WikiMasters Doublons (sans chargement auto)",
-  "version": "1.20.4",
+  "version": "1.20.6",
   "description": "Doublons, cartes animées et manquantes, échanges, alertes d'enchères et amis sur WikiMasters. Compte tes paquets et te prévient.",
   "icons": {
     "128": "icone-128.png"

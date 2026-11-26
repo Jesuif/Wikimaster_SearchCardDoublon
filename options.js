@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.20.4 (sans chargement automatique) - options.js
+//  WikiMasters Doublons 1.20.6 (sans chargement automatique) - options.js
 //  La page des réglages : elle lit et enregistre les réglages dans la
 //  mémoire de l'extension (api.storage.local). commun.js est chargé avant
 //  ce fichier : il fournit api, REGLAGES_PAR_DEFAUT, lireReglages...

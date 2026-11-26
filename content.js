@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.20.4 (sans chargement automatique) - content.js
+//  WikiMasters Doublons 1.20.6 (sans chargement automatique) - content.js
 //  Le navigateur injecte ce script dans chaque page de wiki-masters.com,
 //  juste après commun.js (qui fournit api, RARETES, lireReglages...).
 //  Nouveau en 1.3 : statistiques, historique, cartes manquantes et aide
@@ -3640,7 +3640,10 @@ async function releverPrixMoyen() {
   if (historiqueEnAttente && Date.now() - historiqueEnAttente.recuLe > 30 * SECONDE) historiqueEnAttente = null; // trop vieux
   // La fiche du site s'ouvre par-dessus la page, hors de <main> : on cherche dans toute la page.
   const etiquettes = [...document.body.querySelectorAll("p")].filter(p => !estDansLePanneau(p) && /^prix moyen\s*·/i.test(p.textContent.trim()));
-  if (!etiquettes.length && !(historiqueEnAttente && (nomsDesCartes.has(historiqueEnAttente.carteId) || ficheEvolutionOuverte()))) return;
+  if (!etiquettes.length && !(historiqueEnAttente && (nomsDesCartes.has(historiqueEnAttente.carteId) || ficheEvolutionOuverte()))) {
+    await noterFicheSansVente(); // 1.20.5
+    return;
+  }
   moyenneEnCours = true;
   try {
     await modifierMemoire(() => releverPrixMoyenMaintenant(etiquettes)); // 1.17 : chacun son tour
@@ -3708,10 +3711,42 @@ async function releverPrixMoyenMaintenant(etiquettes) {
   }
 }
 
+// 1.20.5 : l'onglet « Marché » d'une fiche qui annonce qu'il n'y a aucune vente (« Aucune vente… ») :
+// la carte est notée « pas de prix moyen » (le « ? »), avec la date. Une fois par fiche et par minute au plus.
+let ficheSansVenteVue = "";
+async function noterFicheSansVente() {
+  const ouverte = ficheCarteOuverte();
+  if (!ouverte) return;
+  const titre = [...document.querySelectorAll(".sheet-overlay h2, [role='dialog'] h2")].filter(h => estVisible(h) && h.textContent.trim() === ouverte.nom).pop();
+  const fiche = titre && titre.closest(".sheet-overlay, [role='dialog']");
+  if (!fiche) return;
+  const vide = [...fiche.querySelectorAll("p, span, div")].some(e => !estDeLExtension(e) && e.children.length === 0 && estVisible(e)
+    && /^(aucune? (vente|historique|donn[ée]es?|prix)|pas (encore )?(de vente|d'historique|de donn[ée]es)|jamais vendue)/i.test(e.textContent.trim()));
+  if (!vide) return;
+  const cle = `${ouverte.nom}|${ouverte.rarete}`;
+  if (ficheSansVenteVue === cle && sansMoyenneConnue[cle] && Date.now() - sansMoyenneConnue[cle] < MINUTE) return;
+  ficheSansVenteVue = cle;
+  const { marche } = await api.storage.local.get("marche");
+  await noterSansMoyenne(new Set([cle]), (marche && marche.moyennes) || {});
+}
+
 // 1.20 : la fiche ouverte sur l'onglet « Évolution des prix » : { nom, rarete } ou null.
 function ficheEvolutionOuverte() {
   const titre = [...document.querySelectorAll("h3")].find(h => /^[ée]volution des prix$/i.test(h.textContent.trim()) && !estDeLExtension(h));
-  return titre ? lireFicheCarte(titre) : null;
+  const lue = titre ? lireFicheCarte(titre) : null;
+  return lue || ficheCarteOuverte();
+}
+// 1.20.5 : la fiche de carte ouverte (celle du dessus), même quand son onglet « Marché » n'affiche ni
+// « Prix moyen » ni « Évolution des prix » (une carte qui n'a jamais été vendue) : { nom, rarete } ou null.
+function ficheCarteOuverte() {
+  const titre = [...document.querySelectorAll(".sheet-overlay h2, [role='dialog'] h2")]
+    .filter(h => !estDansLePanneau(h) && estVisible(h) && !TITRES_PAS_UNE_CARTE.test(h.textContent.trim())).pop();
+  if (!titre) return null;
+  const nom = titre.textContent.trim();
+  const fiche = titre.closest(".sheet-overlay, [role='dialog']");
+  let rarete = derniereCarteCliquee && memeNom(derniereCarteCliquee.nom, nom) ? derniereCarteCliquee.rarete : null;
+  if (!rarete && fiche) { const r = rareteDuCadre(fiche); rarete = RARETES[r] ? r : null; }
+  return nom && rarete ? { nom, rarete } : null;
 }
 
 // 1.20 : les cartes dont le site n'a AUCUN prix moyen (pas d'histogramme, ou plus de ventes depuis des mois),
@@ -7145,6 +7180,11 @@ function marquerAchats() {
     for (const { cadre, imageRarete } of trouverCadresDeCartes()) {
       const nom = cadre.querySelector(CONFIG.selecteurNomCarte).textContent.trim();
       const trouve = imageRarete.getAttribute("src").match(/rarity\/([a-z_]+)\./);
+      // 1.20.6 : une carte en vente est grisée (« 🔨 en vente »), jusqu'à la fin de la vente.
+      const enVente = actif && trouve ? nombreEnVente(nom, trouve[1]) : 0;
+      cadre.classList.toggle("wmd-en-vente", enVente > 0);
+      const badgeVente = badgeDansPile(cadre, "wmd-badge-en-vente", enVente ? `🔨 ${enVente > 1 ? enVente + " " : ""}en vente` : null);
+      if (badgeVente) badgeVente.title = enVente > 1 ? `${enVente} exemplaires en vente au Marché` : "En vente au Marché : retirée si elle est vendue, dégrisée sinon";
       const liste = actif && trouve ? achatsDe(nom, trouve[1]) : [];
       if (!liste.length) { badgeDansPile(cadre, "wmd-badge-achat", null); continue; }
       const texte = `🛒 ${texteAchat(liste[0])}${liste.length > 1 ? ` (+${liste.length - 1})` : ""}`;
@@ -7984,7 +8024,7 @@ async function ajusterCollection(changements) {
   return faits;
 }
 
-// Les enchères vues sur le site (réponses du Marché) : tes victoires et tes cartes revenues.
+// Les enchères vues sur le site (réponses du Marché) : tes victoires, et la fin de tes ventes.
 async function suivreCollectionDuSite(encheres) {
   if (!monId) return;
   const changements = [];
@@ -7993,17 +8033,117 @@ async function suivreCollectionDuSite(encheres) {
     const rarete = rareteDuSite(e.rarete);
     const quand = e.regle || e.fin;
     if (!e.nom || !rarete || !quand) continue;
-    if (e.gagnantId === monId) {
-      changements.push({ id: e.id, nom: e.nom, rarete, delta: 1, raison: "enchère remportée", quand });
-    } else if (e.vendeurId === monId && !e.gagnantId && !(e.prixFinal > 0) && !(e.mise > 0)) {
-      const annulee = /cancel|annul/i.test(e.statut);
-      changements.push({ id: e.id, nom: e.nom, rarete, delta: 1, raison: annulee ? "vente annulée, carte récupérée" : "pas vendue, carte revenue", quand });
-    }
+    if (e.gagnantId === monId) changements.push({ id: e.id, nom: e.nom, rarete, delta: 1, raison: "enchère remportée", quand });
   }
   if (changements.length) await ajusterCollection(changements);
+  await suivreMesVentes(encheres); // 1.20.6
 }
 
-// « Lancer l'enchère » : la carte quitte ta collection quand la fenêtre se ferme (le site a accepté).
+// ---------------------------------------------------------------------
+//  1.20.6 : TES CARTES EN VENTE
+//  Une carte mise aux enchères reste dans ta collection (le site la garde, bloquée) : elle y est
+//  seulement GRISÉE (« 🔨 en vente »), sans changer le nombre d'exemplaires.
+//  - vendue : elle est retirée (−1) ;
+//  - pas vendue, ou vente annulée : elle est dégrisée (rien n'est rajouté).
+//  Avant, la carte était retirée dès sa mise en vente puis rajoutée à son retour : si ta collection
+//  avait été relue entre-temps (la carte y était encore), elle était comptée deux fois.
+//  Mémoire « cartesEnVente » : { clé : { nom, rarete, depuis, id, compte } }, où « compte » dit si la
+//  collection en mémoire compte encore la carte (« rien » à faire à la mise en vente, cas normal) ou si
+//  une ancienne version l'avait déjà retirée à la mise en vente (« moins1 »).
+// ---------------------------------------------------------------------
+let cartesEnVenteConnues = {};
+let enVenteDepuis = null; // la première utilisation de la 1.20.6 (les ventes plus anciennes : ancienne règle)
+api.storage.local.get(["cartesEnVente", "enVenteDepuis"]).then(({ cartesEnVente, enVenteDepuis: depuis }) => {
+  cartesEnVenteConnues = cartesEnVente || {};
+  enVenteDepuis = depuis || Date.now();
+  if (!depuis) api.storage.local.set({ enVenteDepuis: enVenteDepuis }).catch(() => {});
+}).catch(() => {});
+api.storage.onChanged.addListener(changements => {
+  if (changements.cartesEnVente) { cartesEnVenteConnues = changements.cartesEnVente.newValue || {}; versionPage++; }
+});
+// Combien d'exemplaires de cette carte (cette rareté) sont en vente.
+function nombreEnVente(nom, rarete) {
+  return Object.values(cartesEnVenteConnues).filter(v => memeNom(v.nom, nom) && v.rarete === rarete).length;
+}
+function modifierEnVente(tache) {
+  return navigator.locks.request("wmd-collection", async () => {
+    const { cartesEnVente = {}, collection, collectionSuivie = {} } = await api.storage.local.get(["cartesEnVente", "collection", "collectionSuivie"]);
+    const resultat = await tache(cartesEnVente, collection, collectionSuivie);
+    if (!resultat) return resultat;
+    // Ménage : une mise en vente jamais revue depuis 10 jours (sans identifiant), ou de plus de 40 jours, est oubliée.
+    for (const [cle, v] of Object.entries(cartesEnVente)) {
+      if (Date.now() - v.depuis > (v.id ? 40 : 10) * JOUR) delete cartesEnVente[cle];
+    }
+    const aEcrire = { cartesEnVente };
+    if (resultat.collection && collection) { aEcrire.collection = collection; aEcrire.collectionSuivie = collectionSuivie; derniereCollection = []; }
+    await api.storage.local.set(aEcrire);
+    return resultat;
+  });
+}
+// La mise en vente de « Lancer l'enchère » (sans identifiant : il arrivera avec les réponses du Marché).
+function noterMiseEnVente(nom, rarete, quand) {
+  return modifierEnVente(memo => {
+    memo[`lancee:${nom}|${rarete}|${quand}`] = { nom, rarete, depuis: quand, id: null, compte: "rien" };
+    return {};
+  }).then(() => afficherStatut(`🔨 ${nom} (${lettreRarete(rarete)}) mise en vente : grisée dans ta collection jusqu'à la fin de la vente.`, GARDER_5S))
+    .catch(() => {});
+}
+// La mise en vente qui correspond à cette enchère : par son identifiant, sinon la plus ancienne sans identifiant.
+function miseEnVenteDe(memo, e, rarete) {
+  if (memo[e.id]) return e.id;
+  const libres = Object.entries(memo).filter(([, v]) => !v.id && memeNom(v.nom, e.nom) && v.rarete === rarete)
+    .sort((a, b) => a[1].depuis - b[1].depuis);
+  return libres.length ? libres[0][0] : null;
+}
+async function suivreMesVentes(encheres, annulee = null) {
+  if (!reglages.suiviCollection) return;
+  const miennes = encheres.filter(e => e && e.nom && rareteDuSite(e.rarete) && (e === annulee || (monId && e.vendeurId === monId)));
+  if (!miennes.length) return;
+  const faits = [];
+  await modifierEnVente((memo, collection, suivie) => {
+    let change = false, collectionChangee = false;
+    for (const e of miennes) {
+      const rarete = rareteDuSite(e.rarete);
+      const cle = miseEnVenteDe(memo, e, rarete);
+      const rec = cle ? memo[cle] : null;
+      const finie = e === annulee || (e.statut && e.statut !== "active");
+      if (!finie) {
+        // Une vente en cours : notée (avec son identifiant) si elle ne l'était pas.
+        if (rec && rec.id === e.id) continue;
+        if (rec) delete memo[cle];
+        const depuis = rec ? rec.depuis : e.cree || Date.now();
+        const ancienne = !rec && depuis < (enVenteDepuis || 0); // mise en vente avec une ancienne version
+        memo[e.id] = { nom: e.nom, rarete, depuis, id: e.id, compte: rec ? rec.compte : ancienne ? "moins1" : "rien" };
+        change = true;
+        continue;
+      }
+      // Une vente finie.
+      if (rec) { delete memo[cle]; change = true; }
+      if (!collection || !Array.isArray(collection.cartes) || suivie[e.id]) continue;
+      const quand = e.regle || e.fin || Date.now();
+      if (quand < collection.date) { suivie[e.id] = Date.now(); collectionChangee = true; continue; } // la lecture l'a déjà vue
+      const depuis = rec ? rec.depuis : e.cree;
+      if (!rec && !depuis) continue; // on ne sait pas quand elle a été mise en vente : on ne touche à rien
+      let compte = rec ? rec.compte : depuis >= (enVenteDepuis || Infinity) ? "rien" : "moins1";
+      if (collection.date > depuis) compte = "rien"; // la collection a été relue pendant la vente : elle la compte
+      const vendue = e !== annulee && (Boolean(e.gagnantId) || e.prixFinal > 0);
+      const delta = vendue ? (compte === "rien" ? -1 : 0) : (compte === "moins1" ? 1 : 0);
+      suivie[e.id] = Date.now();
+      collectionChangee = true;
+      if (delta && changerQuantite(collection, e.nom, rarete, delta)) {
+        faits.push({ nom: e.nom, rarete, delta, raison: vendue ? "vendue" : /cancel|annul/i.test(e.statut || "") || e === annulee ? "vente annulée, carte récupérée" : "pas vendue, carte revenue" });
+      } else if (!vendue) {
+        faits.push({ nom: e.nom, rarete, delta: 0, raison: "pas vendue : dégrisée" });
+      }
+    }
+    return change || collectionChangee ? { collection: collectionChangee } : false;
+  }).catch(() => null);
+  const affiches = faits.filter(f => f.delta);
+  if (affiches.length) afficherStatut(texteChangementCollection(affiches), GARDER_5S);
+  else if (faits.length) afficherStatut(`📚 ${faits[0].nom} (${lettreRarete(faits[0].rarete)}) n'a pas été vendue : elle est dégrisée dans ta collection.`, GARDER_5S);
+}
+
+// « Lancer l'enchère » : la carte est notée en vente quand la fenêtre se ferme (le site a accepté).
 document.addEventListener("click", evenement => {
   const bouton = evenement.target instanceof Element ? evenement.target.closest("button") : null;
   if (!bouton || !/^lancer l'ench[èe]re$/i.test(bouton.textContent.trim())) return;
@@ -8012,7 +8152,7 @@ document.addEventListener("click", evenement => {
   const { nom, rarete } = fenetre;
   const quand = Date.now();
   attendre(() => !fenetreMiseEnVente(), 10 * SECONDE).then(partie => {
-    if (partie) return ajusterCollection([{ nom, rarete, delta: -1, raison: "mise aux enchères", quand }]);
+    if (partie && reglages.suiviCollection) return noterMiseEnVente(nom, rarete, quand);
   }).catch(() => {});
 }, true);
 
@@ -8026,7 +8166,8 @@ document.addEventListener("click", evenement => {
   const quand = Date.now();
   // Le bouton disparaît quand le site a accepté l'annulation.
   attendre(() => !document.body.contains(bouton) || !estVisible(bouton), 10 * SECONDE).then(fait => {
-    if (fait) return ajusterCollection([{ id: e.id, nom: e.nom, rarete: rareteDuSite(e.rarete), delta: 1, raison: "vente annulée, carte récupérée", quand }]);
+    const annulee = { ...e, regle: quand };
+    if (fait) return suivreMesVentes([annulee], annulee); // 1.20.6 : dégrisée (pas de +1)
   }).catch(() => {});
 }, true);
 

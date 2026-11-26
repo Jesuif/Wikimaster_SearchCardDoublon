@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.20.4 (sans chargement automatique) - background.js
+//  WikiMasters Doublons 1.20.6 (sans chargement automatique) - background.js
 //  Le « script d'arrière-plan » : il tourne même quand aucune page
 //  WikiMasters n'est ouverte, tant que le navigateur est lancé.
 //  Son rôle : estimer ton stock de paquets, l'afficher sur l'icône,

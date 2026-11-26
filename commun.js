@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.20.4 (sans chargement automatique) - commun.js
+//  WikiMasters Doublons 1.20.6 (sans chargement automatique) - commun.js
 //  Nouveau en 1.3 : ce fichier est partagé par les trois parties de
 //  l'extension (content.js, background.js et la page des réglages).
 //  On y range ce qui doit être identique partout, pour ne l'écrire qu'une fois.

@@ -21,7 +21,7 @@ L'extension ajoute sur le site un panneau flottant, en bas à droite (réduit au
 - **Affiche vos doublons**, triés par quantité, rareté, nom ou animation.
 - **Statistiques par rareté** : exemplaires, cartes différentes, doublons, cartes animées.
 - **Historique** de vos 30 dernières lectures, avec les nouvelles cartes depuis la précédente.
-- **Votre collection reste à jour entre deux lectures** : les cartes des paquets ouverts sont ajoutées une par une, une carte mise aux enchères ou défaussée est retirée, une enchère remportée, une vente annulée ou invendue et un échange accepté sont comptés.
+- **Votre collection reste à jour entre deux lectures** : les cartes des paquets ouverts, les enchères remportées et les échanges acceptés sont ajoutés, une carte défaussée ou donnée est retirée. Une carte mise aux enchères reste dans votre collection, grisée (« 🔨 en vente ») : elle est retirée si elle se vend, et redevient normale si la vente est annulée ou finit sans acheteur.
 - **Exports** en CSV (Excel) ou JSON, et **📥 import** d'un fichier exporté (collection ou prix).
 - Les cartes **L+ (shiny)** sont comptées comme des L.
 
@@ -34,7 +34,7 @@ L'extension ajoute sur le site un panneau flottant, en bas à droite (réduit au
 ### Marché et prix
 
 - **Relève les prix** du Marché pendant que vous naviguez : les **mises actuelles** (jamais les mises de départ), les ventes terminées et les pages d'enchères.
-- **Prix moyen du site** relu sur la fiche d'une carte, pour toutes ses raretés, avec une **pastille rouge** quand l'historique des prix de la carte est enregistré. Le bouton **« 📈 Relever son prix moyen maintenant »** le fait depuis la fiche de n'importe quelle carte. **« ? »** signale une carte dont le site n'a pas de prix moyen.
+- **Prix moyen du site** relu sur la fiche d'une carte, pour toutes ses raretés, avec une **pastille rouge** quand l'historique des prix de la carte est enregistré. Le bouton **« 📈 Relever son prix moyen maintenant »** le fait depuis la fiche de n'importe quelle carte. **« ? »** signale une carte dont le site n'a pas de prix moyen ou qui n'a jamais été vendue (la date de la vérification est dans l'infobulle).
 - **Estime la valeur de vos cartes** et affiche le prix dans la fiche d'une carte, sur la page d'une enchère et en badges sur votre Collection (rangés sous l'étoile des favoris).
 - **Encadre les bonnes affaires** : jaune puis rouge par rapport au prix moyen du site, bleu par rapport au prix le plus haut du Marché, avec des seuils réglables.
 - **Repères « + / ++ / +++ »** (vert ou rouge) selon l'écart entre la mise et le prix moyen.
@@ -222,4 +222,4 @@ Pensez aussi à vous désabonner du canal dans l'application ntfy si vous l'util
 
 ---
 
-Version 1.20.4 · [Historique des versions](CHANGELOG.md) · Auteur : Jesuif — extension non officielle, sans lien avec WikiMasters.
+Version 1.20.6 · Auteur : Jesuif — extension non officielle, sans lien avec WikiMasters.

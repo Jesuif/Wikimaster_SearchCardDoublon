@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.20.4 (sans chargement automatique) - reponses-site.js
+//  WikiMasters Doublons 1.20.6 (sans chargement automatique) - reponses-site.js
 //  Nouveau en 1.15 : ce petit script tourne DANS la page du site (et non à côté,
 //  comme content.js). Il regarde les réponses que le site reçoit déjà pour son
 //  Marché (/api/marketplace…) : la liste des enchères, la page d'une enchère et
@@ -30,6 +30,8 @@
     const regle = typeof a.settled_at === "string" ? Date.parse(a.settled_at) : NaN;
     return {
       regle: Number.isFinite(regle) ? regle : null, // l'heure où l'enchère a été soldée (fin réelle)
+      // 1.20.6 : l'heure de la mise en vente (pour savoir si ta dernière lecture de la collection l'a vue).
+      cree: typeof a.created_at === "string" && Number.isFinite(Date.parse(a.created_at)) ? Date.parse(a.created_at) : null,
       id: a.id.toLowerCase(),
       fin: Number.isFinite(fin) ? fin : null,
       statut: typeof a.status === "string" ? a.status : null,
@@ -90,9 +92,12 @@
     })).filter(p => p.moyenne !== null);
   }
   function resumerHistorique(donnees, carteId) {
-    if (!donnees || typeof donnees !== "object" || !donnees.by_rarity || typeof donnees.by_rarity !== "object") return null;
+    if (!donnees || typeof donnees !== "object" || Array.isArray(donnees)) return null;
+    // 1.20.5 : une carte jamais vendue : le site peut ne renvoyer aucune rareté (by_rarity vide, nul ou absent).
+    // L'historique vide est quand même transmis : l'extension note alors « pas de prix moyen » (le « ? »).
     const parRarete = {};
-    for (const [code, r] of Object.entries(donnees.by_rarity)) {
+    const raretes = donnees.by_rarity && typeof donnees.by_rarity === "object" ? donnees.by_rarity : {};
+    for (const [code, r] of Object.entries(raretes)) {
       if (!r || typeof r !== "object") continue;
       parRarete[code] = { semaines: resumerPeriodes(r.weekly), mois: resumerPeriodes(r.monthly) };
     }
@@ -156,7 +161,10 @@
       } else if (historique) {
         // On lit seulement la réponse que le site a lui-même demandée.
         promesse.then(reponse => {
-          if (!reponse || !reponse.ok) return;
+          if (!reponse) return;
+          // 1.20.5 : « 404 » = pas d'historique pour cette carte (jamais vendue) : un historique vide.
+          if (reponse.status === 404) { const vide = resumerHistorique({}, historique[1]); if (vide) window.postMessage(vide, location.origin); return; }
+          if (!reponse.ok) return;
           reponse.clone().json().then(donnees => {
             const message = resumerHistorique(donnees, historique[1]);
             if (message) window.postMessage(message, location.origin);

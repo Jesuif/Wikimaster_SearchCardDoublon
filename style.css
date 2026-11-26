@@ -855,3 +855,11 @@ html.wmd-marche-compact .wmd-icone { width: 18px; height: 18px; font-size: 10px;
   font-size: 11px; font-weight: bold; pointer-events: none;
 }
 .wmd-echange-carte.wmd-echange-grande { outline-width: 3px; outline-offset: 2px; }
+/* 1.20.6 : une carte en vente au Marché, grisée dans la Collection */
+.wmd-en-vente > :not(.wmd-pile) { filter: grayscale(1) brightness(0.65); }
+.wmd-badge-en-vente {
+  height: 20px; padding: 0 6px; box-sizing: border-box; white-space: nowrap; border-radius: 999px;
+  background: #5b6470; color: #fff; font: bold 12px/20px system-ui, sans-serif; box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+}
+.wmd-badge-en-vente::before { content: attr(data-texte); }
+.wmd-pile > .wmd-badge-en-vente { order: 0; }
