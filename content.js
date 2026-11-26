@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.17.5 (sans chargement automatique) - content.js
+//  WikiMasters Doublons 1.20.4 (sans chargement automatique) - content.js
 //  Le navigateur injecte ce script dans chaque page de wiki-masters.com,
 //  juste après commun.js (qui fournit api, RARETES, lireReglages...).
 //  Nouveau en 1.3 : statistiques, historique, cartes manquantes et aide
@@ -345,7 +345,8 @@ function construireLegende(bloc) {
     ["", "🎈", "Prix peut-être gonflé : une semaine de ventes bien plus chères que d'habitude, puis retour à la normale."],
     ["", "✨ / A", "Carte animée (A doré en affichage allégé)."],
     ["", "🔔", "Enchère suivie (vert : tu mènes, rouge : surenchéri)."],
-    ["", "$461", "Collection : prix moyen du site ; en bleu, le plus bas / le plus haut vus au Marché ; 🛒 = prix d'achat."]
+    ["", "?", "Le site n'a pas de prix moyen pour cette carte (date de la vérification dans l'infobulle)."],
+    ["", "$461", "Collection (sous l'étoile des favoris) : prix moyen du site ; en bleu, le plus bas / le plus haut vus au Marché ; 🛒 = prix d'achat."]
   ];
   const liste = creer("div", undefined, "wmd-legende-liste");
   for (const [classe, exemple, texte] of lignes) {
@@ -421,30 +422,33 @@ function creerPanneau() {
     panneau.appendChild(bloc);
     return bloc;
   };
-  const gPage = groupe("wmd-groupe-page", "🔍 Sur cette page");
-  ajouterBouton("wmd-doublons", "Trouver mes doublons", () => trouverMesDoublons(), gPage, "Lit toute ta collection, page par page (ne change pas de page pendant ce temps)");
-  ajouterBouton("wmd-manquantes", "Trouver mes cartes manquantes", () => trouverMesCartesManquantes(), gPage, "Choisis d'abord une rareté avec les filtres du site");
+  // 1.19 : groupes rangés par sujet (ta collection, le Marché, tes amis, les prix, les fichiers) ;
+  // dans chaque groupe, le bouton le plus utilisé d'abord. Seuls les boutons utiles sur la page sont montrés.
+  const gCollection = groupe("wmd-groupe-page", "📚 Ma collection");
+  ajouterBouton("wmd-doublons", "Trouver mes doublons", () => trouverMesDoublons(), gCollection, "Lit toute ta collection, page par page (ne change pas de page pendant ce temps)");
+  ajouterBouton("wmd-estimer", "Estimer la valeur de mes cartes", () => estimerMesCartes(), gCollection);
+  ajouterBouton("wmd-manquantes", "Trouver mes cartes manquantes", () => trouverMesCartesManquantes(), gCollection, "Choisis d'abord une rareté avec les filtres du site");
   // Nouveau en 1.8 : les cartes animées de tout le jeu (page « Toutes les cartes »).
-  ajouterBouton("wmd-animees-jeu", "✨ Trouver les cartes animées du jeu", () => trouverCartesAnimees(), gPage);
-  ajouterBouton("wmd-animees-revoir", "✨ Revoir les cartes animées trouvées", () => afficherAnimeesJeu(), gPage);
-  const gPrix = groupe("wmd-groupe-prix", "💰 Prix");
-  ajouterBouton("wmd-estimer", "Estimer la valeur de mes cartes", () => estimerMesCartes(), gPrix);
-  ajouterBouton("wmd-maj-prix", "☁️ Mettre à jour les prix partagés", () => mettreAJourPrixPartages(), gPrix,
-    "Lit le fichier des prix partagé, garde la donnée la plus récente, puis le renvoie complété"); // 1.14
-  ajouterBouton("wmd-prix-csv", "Exporter les prix du marché (CSV)", () => exporterPrixMarche(), gPrix);
-  const gFichiers = groupe("wmd-groupe-fichiers", "📁 Fichiers");
-  ajouterBouton("wmd-csv", "Exporter ma collection en CSV (Excel)", () => exporterCSV(), gFichiers);
-  ajouterBouton("wmd-importer", "📥 Importer un fichier CSV (collection ou prix)", () => choisirFichierImport(), gFichiers); // 1.10
-  const gAmis = groupe("wmd-groupe-amis", "👥 Amis et enchères");
+  ajouterBouton("wmd-animees-jeu", "✨ Trouver les cartes animées du jeu", () => trouverCartesAnimees(), gCollection);
+  ajouterBouton("wmd-animees-revoir", "✨ Revoir les cartes animées trouvées", () => afficherAnimeesJeu(), gCollection);
+  const gAmis = groupe("wmd-groupe-amis", "🔔 Enchères et amis");
+  // Nouveau en 1.8 : les enchères suivies (alertes avant la fin).
+  ajouterBouton("wmd-encheres", "🔔 Mes enchères suivies", () => afficherEncheresSuivies(), gAmis);
   // Nouveau en 1.5 : tes cartes souhaitées chez tes amis (bouton visible sur toutes les pages).
   ajouterBouton("wmd-souhaits", "Chercher mes souhaits chez mes amis", () => chercherSouhaitsChezAmis(), gAmis,
     "Ouvre la fenêtre d'échange de chaque ami : plusieurs requêtes par ami, à utiliser avec modération");
   ajouterBouton("wmd-souhaits-resultats", "Revoir les résultats (souhaits)", () => afficherResultatsSouhaits(), gAmis);
-  // Nouveau en 1.8 : les enchères suivies (alertes avant la fin).
-  ajouterBouton("wmd-encheres", "🔔 Mes enchères suivies", () => afficherEncheresSuivies(), gAmis);
-  // 1.17.3 : remettre en vente les cartes invendues, au même prix de départ et pour la même durée.
-  if (REMISE_EN_VENTE) ajouterBouton("wmd-remise", "🔁 Remettre en vente les invendues", () => boutonRemiseEnVente(), gAmis,
-    "Même mise de départ, même durée. Se lance tout de suite (sans confirmation) et clique pour toi dans ta Collection ; recliquer arrête");
+  const gPrix = groupe("wmd-groupe-prix", "💰 Prix et fichiers");
+  ajouterBouton("wmd-maj-prix", "☁️ Mettre à jour les prix partagés", () => mettreAJourPrixPartages(), gPrix,
+    "Lit le fichier des prix partagé, garde la donnée la plus récente, puis le renvoie complété"); // 1.14
+  ajouterBouton("wmd-prix-csv", "Exporter les prix du marché (CSV)", () => exporterPrixMarche(), gPrix);
+  ajouterBouton("wmd-csv", "Exporter ma collection en CSV (Excel)", () => exporterCSV(), gPrix);
+  ajouterBouton("wmd-importer", "📥 Importer un fichier CSV (collection ou prix)", () => choisirFichierImport(), gPrix); // 1.10
+  // 1.17.5 : les ventes à remettre en vente si invendues (case cochée dans « Mettre aux enchères »).
+  const blocReventes = creer("div", undefined, "wmd-groupe wmd-reventes");
+  blocReventes.id = "wmd-reventes";
+  blocReventes.hidden = true;
+  gAmis.after(blocReventes); // 1.19 : juste sous les enchères
 
   // 1.16 : toutes les options du Marché dans un sous-menu repliable. Ouvert ou fermé : ton choix est gardé.
   // 1.17 : rangées en quatre sous-menus : cadres et repères, filtres, chargement automatique, légende.
@@ -457,6 +461,18 @@ function creerPanneau() {
     api.storage.local.set({ optionsMarcheOuvertes: optionsMarche.open }).catch(() => {});
   });
   panneau.appendChild(optionsMarche);
+  // 1.20 : « ⭐ Mes souhaits » (Marché seulement), repliable ; ton choix (ouvert / fermé) est gardé.
+  const souhaitsMarche = creer("details", undefined, "wmd-bloc wmd-souhaits-marche");
+  souhaitsMarche.id = "wmd-souhaits-marche";
+  souhaitsMarche.appendChild(creer("summary", "⭐ Mes souhaits"));
+  souhaitsMarche.open = Boolean(sousMenusOuverts["wmd-souhaits-marche"]);
+  souhaitsMarche.addEventListener("toggle", () => {
+    sousMenusOuverts["wmd-souhaits-marche"] = souhaitsMarche.open;
+    api.storage.local.set({ sousMenusOuverts: sousMenusOuverts }).catch(() => {});
+  });
+  souhaitsMarche.hidden = true;
+  panneau.appendChild(souhaitsMarche);
+  setTimeout(() => afficherSouhaitsMarche(true), 0);
   const sousMenu = (id, titreSousMenu, ouvertParDefaut) => {
     const bloc = creer("details", undefined, "wmd-sous-menu");
     bloc.id = id;
@@ -469,8 +485,9 @@ function creerPanneau() {
     optionsMarche.appendChild(bloc);
     return bloc;
   };
-  const reperes = sousMenu("wmd-om-reperes", "🖼 Cadres et repères sur les cartes", true);
+  // 1.19 : les filtres d'abord (ce que l'on change le plus souvent), puis les repères.
   const filtres = sousMenu("wmd-om-filtres", "🔎 Filtres (cacher des cartes)", false);
+  const reperes = sousMenu("wmd-om-reperes", "🖼 Cadres et repères sur les cartes", true);
   const legende = sousMenu("wmd-legende", "❔ Légende des cadres et icônes", false);
 
   // Nouveau en 1.7.4 : une case pour afficher ou cacher les prix min / max trouvés au Marché.
@@ -663,6 +680,23 @@ function creerPanneau() {
   caseBientot.append(cocheBientot, document.createTextNode(" Seulement les enchères qui finissent dans "), minutesBientot, texteBientot);
   filtres.appendChild(caseBientot);
 
+  // 1.17.8 : onglet « Parcourir » : seulement les cartes animées (image qui bouge).
+  const caseAnimees = creer("label", undefined, "wmd-case");
+  caseAnimees.id = "wmd-case-animees";
+  const cocheAnimees = creer("input");
+  cocheAnimees.type = "checkbox";
+  cocheAnimees.checked = marcheQueAnimees;
+  cocheAnimees.addEventListener("change", () => {
+    marcheQueAnimees = cocheAnimees.checked;
+    api.storage.local.set({ marcheQueAnimees: cocheAnimees.checked }).catch(() => {});
+    filtrerCartesAnimeesMarche();
+  });
+  const texteAnimees = creer("span", " ✨ Seulement les cartes animées");
+  texteAnimees.id = "wmd-texte-animees";
+  caseAnimees.append(cocheAnimees, texteAnimees);
+  caseAnimees.title = "Onglet « Parcourir » du Marché : les cartes dont l'image ne bouge pas sont cachées (le temps de vérifier une nouvelle carte, elle peut apparaître une seconde).";
+  filtres.appendChild(caseAnimees);
+
   // 1.14 : cacher les cartes dont la mise dépasse un montant choisi.
   const casePrix = creer("label", undefined, "wmd-case");
   casePrix.id = "wmd-case-prixmax";
@@ -719,6 +753,12 @@ function creerPanneau() {
   caseMoyenne.append(cocheMoyenne, document.createTextNode(" Cacher les cartes à plus de "), pctMoyenne, texteMoyenne);
   filtres.appendChild(caseMoyenne);
 
+  // 1.19 : les filtres rangés du plus utile au plus rare : le prix, les bonnes affaires, les cartes animées,
+  // la fin proche, puis l'affichage allégé.
+  for (const id of ["wmd-case-prixmax", "wmd-case-sousmoyenne", "wmd-case-encadrees", "wmd-case-animees", "wmd-case-bientot", "wmd-case-compact"]) {
+    const element = filtres.querySelector("#" + id);
+    if (element) filtres.appendChild(element);
+  }
   construireLegende(legende);    // 1.17
 
   const echange = creer("div");
@@ -753,6 +793,7 @@ function actualiserPanneau() {
     "wmd-case-minmax": reglages.marche,
     "wmd-case-compact": marcheFiltrable, // 1.13
     "wmd-case-bientot": marcheFiltrable, // 1.14
+    "wmd-case-animees": marcheFiltrable && /^parcourir/i.test(ongletMarcheOuvert() || "Parcourir"), // 1.17.8 : onglet « Parcourir » seulement
     "wmd-case-prixmax": marcheFiltrable, // 1.14
     "wmd-case-sousmoyenne": marcheFiltrable, // 1.16
     "wmd-seuils": marcheFiltrable && reglages.marche, // 1.14
@@ -765,7 +806,6 @@ function actualiserPanneau() {
     "wmd-animees-jeu": page === "toutes-les-cartes" && reglages.animeesJeu,
     "wmd-animees-revoir": (page === "toutes-les-cartes" || page === "collection") && reglages.animeesJeu && aDesAnimeesJeu,
     "wmd-encheres": reglages.encheres && (page === "marche" || nombreEncheresSuivies > 0),
-    "wmd-remise": REMISE_EN_VENTE && (Boolean(remiseEnVente) || ((page === "marche" || page === "collection") && ventesInvendues().length > 0)), // 1.17.3
     "wmd-estimer": (page === "marche" || page === "collection") && reglages.marche,
     // 1.14 : quand le fichier partagé est réglé, « Mettre à jour les prix » remplace l'export classique.
     "wmd-maj-prix": (page === "marche" || page === "collection") && reglages.marche,
@@ -794,10 +834,33 @@ function actualiserPanneau() {
 }
 
 // Écrit un message dans le panneau ET dans la console (F12).
-function afficherStatut(texte) {
+// 1.19 : afficherStatut(texte, { garder: 5000 }) laisse le message affiché au moins 5 secondes :
+// les messages qui arrivent pendant ce temps attendent (seul le dernier est montré ensuite).
+let statutGardeJusqua = 0, statutEnAttente = null, minuteurStatut = null, dernierStatut = "";
+function afficherStatut(texte, options = {}) {
+  console.log("[WikiMasters Doublons]", texte);
+  dernierStatut = texte;
+  const maintenant = Date.now();
+  if (!options.garder && maintenant < statutGardeJusqua) {
+    statutEnAttente = texte;
+    if (!minuteurStatut) minuteurStatut = setTimeout(() => {
+      minuteurStatut = null;
+      const suivant = statutEnAttente;
+      statutEnAttente = null;
+      if (suivant !== null) ecrireStatut(suivant);
+    }, statutGardeJusqua - maintenant);
+    return;
+  }
+  if (options.garder) {
+    statutGardeJusqua = Math.max(statutGardeJusqua, maintenant + options.garder);
+    statutEnAttente = null;
+    if (minuteurStatut) { clearTimeout(minuteurStatut); minuteurStatut = null; }
+  }
+  ecrireStatut(texte);
+}
+function ecrireStatut(texte) {
   const zone = document.getElementById("wmd-statut");
   if (zone) zone.textContent = texte;
-  console.log("[WikiMasters Doublons]", texte);
 }
 
 
@@ -1192,6 +1255,47 @@ api.storage.onChanged.addListener(changements => {
 // Rien n'est retiré de la page (la carte est seulement cachée) et rien n'est demandé au site :
 // on lit le compte à rebours affiché sur chaque carte. Une carte sans compte à rebours lisible reste affichée.
 // 1.16 : la durée (en minutes) est choisie dans le panneau ; 5 par défaut.
+// 1.17.8 : « Seulement les cartes animées » (onglet « Parcourir » du Marché) : les autres ont la classe wmd-non-animee.
+let marcheQueAnimees = false;
+api.storage.local.get("marcheQueAnimees").then(({ marcheQueAnimees: v }) => {
+  marcheQueAnimees = v === true;
+  const coche = document.querySelector("#wmd-case-animees input");
+  if (coche) coche.checked = marcheQueAnimees;
+  versionPage++;
+}).catch(() => {});
+api.storage.onChanged.addListener(changements => {
+  if (!changements.marcheQueAnimees) return;
+  marcheQueAnimees = changements.marcheQueAnimees.newValue === true;
+  const coche = document.querySelector("#wmd-case-animees input");
+  if (coche) coche.checked = marcheQueAnimees;
+  versionPage++;
+});
+let filtreAnimeesEnCours = false;
+async function filtrerCartesAnimeesMarche() {
+  if (filtreAnimeesEnCours) return;
+  filtreAnimeesEnCours = true;
+  try {
+    const onglet = ongletMarcheOuvert();
+    const actif = marcheQueAnimees && optionsMarcheActives() && (onglet === null || /^parcourir/i.test(onglet));
+    const blocs = [...document.querySelectorAll("[id^='marketplace-auction-']")];
+    if (!actif) {
+      for (const bloc of document.querySelectorAll(".wmd-non-animee")) bloc.classList.remove("wmd-non-animee");
+    } else {
+      // Une image pas encore vérifiable (null) reste affichée : on ne cache que ce qui ne bouge sûrement pas.
+      await executerAvecLimite(blocs, CONFIG.verificationsImagesSimultanees, async bloc => {
+        const animee = (await infoAnimation(bloc)).animee;
+        const cacher = animee === false;
+        if (bloc.classList.contains("wmd-non-animee") !== cacher) bloc.classList.toggle("wmd-non-animee", cacher);
+      });
+    }
+    const texte = document.getElementById("wmd-texte-animees");
+    const voulu = " ✨ Seulement les cartes animées" + (actif ? ` (${document.querySelectorAll(".wmd-non-animee").length} cachée(s))` : "");
+    if (texte && texte.textContent !== voulu) texte.textContent = voulu;
+  } finally {
+    filtreAnimeesEnCours = false;
+  }
+}
+
 let marcheBientotFini = false;
 let marcheBientotMinutes = 5;
 function lireMinutesBientot(valeur) {
@@ -1385,7 +1489,7 @@ function annoncesVisibles() {
   return [...document.querySelectorAll("[id^='marketplace-auction-']")]
     .filter(bloc => !bloc.classList.contains("wmd-trop-cher") && !bloc.classList.contains("wmd-fin-lointaine")
       && !bloc.classList.contains("wmd-au-dessus-moyenne") && !bloc.classList.contains("wmd-pas-encadree")
-      && !bloc.classList.contains("wmd-autre-rarete"));
+      && !bloc.classList.contains("wmd-autre-rarete") && !bloc.classList.contains("wmd-non-animee"));
 }
 
 let chargementSuiteEnCours = false;
@@ -1613,11 +1717,40 @@ function afficherEtatAuto(texte) {
 }
 
 // Tourne toutes les secondes.
+// 1.17.7 : une petite mémoire propre à cet onglet (gardée quand la page se recharge ou change dans l'onglet).
+function memoireOnglet(cle, valeur) {
+  try {
+    if (valeur === undefined) return sessionStorage.getItem(cle);
+    if (valeur === null) sessionStorage.removeItem(cle); else sessionStorage.setItem(cle, valeur);
+  } catch (erreur) { /* stockage refusé : tant pis */ }
+  return null;
+}
+let autoArreteAffiche = false;
 async function boucleAutoMarche() {
+  // 1.19 (optimisation) : arrêté, rien d'autre n'est lu (cette boucle tourne 4 fois par seconde sur toutes les pages).
+  if (!autoMarche.actif) {
+    if (autoEtat !== null || !autoArreteAffiche) { autoEtat = null; memoireOnglet("wmd-auto-ici", null); autoArreteAffiche = true; }
+    afficherEtatAuto("Arrêté.");
+    return;
+  }
+  autoArreteAffiche = false;
   const onglet = pageActuelle() === "marche" && !REGEX_PAGE_ENCHERE.test(location.pathname) ? ongletMarcheOuvert() : "pas le Marché";
   const surParcourir = onglet === null || /^parcourir/i.test(onglet || "");
-  if (!autoMarche.actif) { autoEtat = null; afficherEtatAuto("Arrêté."); return; }
-  if (!surParcourir) { autoEtat = null; afficherEtatAuto("En pause : ouvre l'onglet « Parcourir » du Marché."); return; }
+  if (!surParcourir) {
+    autoEtat = null;
+    // 1.17.7 : l'onglet qui faisait le chargement automatique a changé de page (autre onglet du Marché,
+    // une enchère, la Collection…) : il s'arrête. Sauf pendant une revente (l'extension revient ensuite).
+    if (memoireOnglet("wmd-auto-ici") === "1" && memoireOnglet("wmd-revente-ici") !== "1") {
+      memoireOnglet("wmd-auto-ici", null);
+      enregistrerAutoMarche({ actif: false });
+      afficherStatut("🤖 Chargement automatique arrêté : tu as changé de page.");
+      return;
+    }
+    afficherEtatAuto("En pause : ouvre l'onglet « Parcourir » du Marché.");
+    return;
+  }
+  memoireOnglet("wmd-auto-ici", "1");
+  memoireOnglet("wmd-revente-ici", null);
   if (autoOccupe || enCours || rechercheEnCours) return;
   const maintenant = Date.now();
   if (!autoEtat) autoEtat = { debut: maintenant, prochain: maintenant, chargements: 0, prepare: false, fini: "", absences: 0 };
@@ -3291,6 +3424,7 @@ function appliquerMoyenne(estime, moyenne) {
   estime.estimation = moyenne.prix;
   estime.minimum = false;
   estime.moyenne = true;
+  estime.moyenneLe = moyenne.maj || moyenne.vu || null; // 1.20 : pour l'infobulle « mis à jour le … »
   return estime;
 }
 
@@ -3335,7 +3469,7 @@ let historiqueEnAttente = null;  // le dernier historique reçu dont on ne conna
 
 function recevoirHistorique(historique) {
   if (!historique || !historique.carteId || !historique.parRarete) return;
-  historiqueEnAttente = { ...historique, recuLe: Date.now() };
+  historiqueEnAttente = { ...historique, recuLe: Date.now(), rareteDemandee: demandesHistorique.get(historique.carteId) || null };
   versionPage++; // releverPrixMoyen repasse tout de suite
 }
 
@@ -3359,19 +3493,19 @@ function prixDepuisHistorique(rarete, calcule) {
 }
 
 // Range les prix de toutes les raretés d'un historique sous le nom de la carte. true si quelque chose a changé.
-function rangerHistorique(marche, nom, historique) {
+function rangerHistorique(marche, nom, historique, sansPrix = null) {
   let modifie = false;
   for (const [code, donnees] of Object.entries(historique.parRarete)) {
     const rarete = rareteDuSite(code);
     if (!rarete) continue;
     const trouve = prixDepuisHistorique(donnees, historique.calcule);
-    if (!trouve) continue;
     const cle = `${nom}|${rarete}`;
+    if (!trouve) { if (sansPrix && !(marche.moyennes[cle] && marche.moyennes[cle].prix > 0)) sansPrix.add(cle); continue; } // 1.20
     const ancienne = marche.moyennes[cle];
     // Un prix lu sur la fiche, ou importé, plus récent que ces ventes est gardé.
     if (ancienne && ancienne.source !== "historique" && ancienne.vu >= trouve.vu) continue;
     if (ancienne && ancienne.prix === trouve.prix && ancienne.vu === trouve.vu) continue;
-    marche.moyennes[cle] = { nom: nom, rarete: rarete, prix: trouve.prix, vu: trouve.vu, source: "historique", ventes: trouve.ventes };
+    marche.moyennes[cle] = { nom: nom, rarete: rarete, prix: trouve.prix, vu: trouve.vu, source: "historique", ventes: trouve.ventes, maj: Date.now() };
     modifie = true;
   }
   return modifie;
@@ -3506,7 +3640,7 @@ async function releverPrixMoyen() {
   if (historiqueEnAttente && Date.now() - historiqueEnAttente.recuLe > 30 * SECONDE) historiqueEnAttente = null; // trop vieux
   // La fiche du site s'ouvre par-dessus la page, hors de <main> : on cherche dans toute la page.
   const etiquettes = [...document.body.querySelectorAll("p")].filter(p => !estDansLePanneau(p) && /^prix moyen\s*·/i.test(p.textContent.trim()));
-  if (!etiquettes.length && !(historiqueEnAttente && nomsDesCartes.has(historiqueEnAttente.carteId))) return;
+  if (!etiquettes.length && !(historiqueEnAttente && (nomsDesCartes.has(historiqueEnAttente.carteId) || ficheEvolutionOuverte()))) return;
   moyenneEnCours = true;
   try {
     await modifierMemoire(() => releverPrixMoyenMaintenant(etiquettes)); // 1.17 : chacun son tour
@@ -3520,6 +3654,7 @@ async function releverPrixMoyenMaintenant(etiquettes) {
     marche.moyennes = marche.moyennes || {};
     let modifie = false;
     const fichesVues = new Map(); // nom de la carte → raretés affichées sur sa fiche
+    const sansPrix = new Set(); // 1.20 : « carte|rareté » vérifiées, sans prix moyen sur le site
     for (const p of etiquettes) {
       const rarete = rareteDepuisNom(p.textContent.trim().replace(/^prix moyen\s*·\s*/i, ""));
       if (!rarete) continue;
@@ -3529,11 +3664,12 @@ async function releverPrixMoyenMaintenant(etiquettes) {
       const nom = fiche.querySelector("h2").textContent.trim();
       if (nom) fichesVues.set(nom, [...(fichesVues.get(nom) || []), rarete]);
       const prix = prixApres(feuilles(p.parentElement), p).prix;
+      if (nom && prix === null && !(marche.moyennes[`${nom}|${rarete}`] && marche.moyennes[`${nom}|${rarete}`].prix > 0)) sansPrix.add(`${nom}|${rarete}`); // 1.20
       if (!nom || prix === null) continue;
       const cle = `${nom}|${rarete}`;
       const ancienne = marche.moyennes[cle];
       if (ancienne && ancienne.prix === prix && Date.now() - ancienne.vu < 3600 * 1000) continue;
-      marche.moyennes[cle] = { nom: nom, rarete: rarete, prix: prix, vu: Date.now() };
+      marche.moyennes[cle] = { nom: nom, rarete: rarete, prix: prix, vu: Date.now(), maj: Date.now() };
       modifie = true;
     }
     // 1.16 : l'historique des prix reçu du site. Le nom de la carte vient des réponses du Marché ou,
@@ -3546,16 +3682,66 @@ async function releverPrixMoyenMaintenant(etiquettes) {
         const connues = Object.keys(historique.parRarete).map(rareteDuSite);
         if (raretes.some(r => connues.includes(r))) nom = nomFiche;
       }
+      // 1.20 : la fiche ouverte sur « Évolution des prix », même sans « Prix moyen » affiché
+      // (une carte sans histogramme) : son nom et sa rareté.
+      const ouverte = !nom && fichesVues.size === 0 ? ficheEvolutionOuverte() : null;
+      if (ouverte) {
+        const connues = Object.keys(historique.parRarete).map(rareteDuSite);
+        if (!connues.length || connues.includes(ouverte.rarete)) { nom = ouverte.nom; fichesVues.set(nom, [ouverte.rarete]); }
+      }
       if (nom) {
         historiqueEnAttente = null;
         nomsDesCartes.set(historique.carteId, nom);
-        if (rangerHistorique(marche, nom, historique)) modifie = true;
+        if (rangerHistorique(marche, nom, historique, sansPrix)) modifie = true;
+        // 1.20 : la rareté demandée (clic sur une carte d'un échange) ou celle de la fiche ouverte, absente de l'historique.
+        for (const rarete of [historique.rareteDemandee, ...(fichesVues.get(nom) || [])]) {
+          const cle = `${nom}|${rarete}`;
+          if (rarete && RARETES[rarete] && !(marche.moyennes[cle] && marche.moyennes[cle].prix > 0)
+            && !Object.keys(historique.parRarete).some(code => rareteDuSite(code) === rarete)) sansPrix.add(cle);
+        }
         await rangerTendances(nom, historique);
         historiqueEnregistre = { nom: nom, quand: Date.now() }; // 1.17.3 : la pastille rouge de la fiche
       }
     }
     if (modifie) await api.storage.local.set({ marche: marche });
+    await noterSansMoyenne(sansPrix, marche.moyennes);
   }
+}
+
+// 1.20 : la fiche ouverte sur l'onglet « Évolution des prix » : { nom, rarete } ou null.
+function ficheEvolutionOuverte() {
+  const titre = [...document.querySelectorAll("h3")].find(h => /^[ée]volution des prix$/i.test(h.textContent.trim()) && !estDeLExtension(h));
+  return titre ? lireFicheCarte(titre) : null;
+}
+
+// 1.20 : les cartes dont le site n'a AUCUN prix moyen (pas d'histogramme, ou plus de ventes depuis des mois),
+// avec la date de la vérification : « ? » sur la carte. Gardées à part (« sansMoyenne »), oubliées dès qu'un prix arrive.
+let sansMoyenneConnue = {};
+api.storage.local.get("sansMoyenne").then(({ sansMoyenne }) => { sansMoyenneConnue = sansMoyenne || {}; }).catch(() => {});
+api.storage.onChanged.addListener(changements => {
+  if (changements.sansMoyenne) { sansMoyenneConnue = changements.sansMoyenne.newValue || {}; versionPage++; }
+});
+async function noterSansMoyenne(cles, moyennes) {
+  const { sansMoyenne = {} } = await api.storage.local.get("sansMoyenne");
+  let modifie = false;
+  for (const cle of cles) {
+    if (moyennes[cle] && moyennes[cle].prix > 0) continue;
+    if (sansMoyenne[cle] && Date.now() - sansMoyenne[cle] < MINUTE) continue;
+    sansMoyenne[cle] = Date.now();
+    modifie = true;
+  }
+  for (const cle of Object.keys(sansMoyenne)) if (moyennes[cle] && moyennes[cle].prix > 0) { delete sansMoyenne[cle]; modifie = true; }
+  if (modifie) await api.storage.local.set({ sansMoyenne: sansMoyenne });
+}
+// « vérifié le 24/11/2026 » : la date de la vérification sans prix, ou null.
+function dateSansMoyenne(nom, rarete) {
+  const quand = sansMoyenneConnue[`${nom}|${rarete}`];
+  return quand ? new Date(quand).toLocaleDateString("fr-FR") : null;
+}
+// La date d'un prix moyen : celle de sa mise à jour par l'extension (ou, à défaut, celle des ventes).
+function dateMoyenne(m) {
+  const quand = m && (m.maj || m.vu);
+  return quand ? new Date(quand).toLocaleDateString("fr-FR") : "date inconnue";
 }
 
 // ---------------------------------------------------------------------
@@ -3647,7 +3833,7 @@ async function importerFichiersCSV(fichiers) {
     } catch (erreur) {
       afficherStatut(`« ${fichier.name} » : import impossible (${erreur.message}).`);
     }
-    bilans.push(document.getElementById("wmd-statut").textContent);
+    bilans.push(dernierStatut);
   }
   if (fichiers.length < 2) return;
   afficherStatut(`${fichiers.length} fichiers traités.`);
@@ -4250,6 +4436,7 @@ function empreinteTexte(texte) {
   }
   return `${texte.length}-${(h1 >>> 0).toString(36)}-${(h2 >>> 0).toString(36)}`;
 }
+const GARDER_5S = { garder: 5 * SECONDE }; // 1.19 : le résultat reste affiché au moins 5 secondes
 async function mettreAJourPrixPartages(automatique = false) {
   if (majPartageEnCours) return;
   majPartageEnCours = true;
@@ -4264,27 +4451,30 @@ async function mettreAJourPrixPartages(automatique = false) {
     const lu = await demander({ type: "partage-lire" });
     let bilanImport = "";
     if (lu.texte && lu.texte.trim()) {
-      if (!(await importerTexteCSV("le fichier partagé", lu.texte, true))) return; // illisible : on n'envoie rien
-      bilanImport = document.getElementById("wmd-statut").textContent + " ";
+      if (!(await importerTexteCSV("le fichier partagé", lu.texte, true))) { // illisible : on n'envoie rien
+        afficherStatut(dernierStatut || "☁️ Le fichier partagé est illisible : rien n'a été envoyé.", GARDER_5S);
+        return;
+      }
+      bilanImport = dernierStatut ? dernierStatut + " " : "";
     }
     const contenu = await csvPrixMarche();
-    if (!contenu) return afficherStatut(bilanImport + "Aucun prix à envoyer : passe d'abord sur la page Marché.");
+    if (!contenu) return afficherStatut(bilanImport + "Aucun prix à envoyer : passe d'abord sur la page Marché.", GARDER_5S);
     const empreinte = empreinteTexte(contenu);
     const { partageDernierEnvoi: dernier } = await api.storage.local.get("partageDernierEnvoi");
     if (automatique && lu.texte && lu.texte.trim() && dernier && dernier.empreinte === empreinte
       && Date.now() - dernier.le < RENVOI_PARTAGE_MAX_MS) {
-      return afficherStatut(bilanImport + `☁️ Rien de nouveau à envoyer (${dateLisible(Date.now())}) : le fichier partagé a déjà tes prix.`);
+      return afficherStatut(bilanImport + `☁️ Rien de nouveau à envoyer (${dateLisible(Date.now())}) : le fichier partagé a déjà tes prix.`, GARDER_5S);
     }
     afficherStatut(bilanImport + "☁️ Envoi du fichier complet…");
     const envoi = await demander({ type: "partage-ecrire", texte: contenu });
     await api.storage.local.set({ partageDernierEnvoi: { empreinte: empreinte, le: Date.now() } }).catch(() => {});
     afficherStatut(bilanImport + `☁️ Fichier partagé mis à jour (${dateLisible(Date.now())}) : ${envoi.lignes} carte(s)`
-      + (envoi.ajoutees ? `, dont ${envoi.ajoutees} nouvelle(s) apportée(s) par toi.` : "."));
+      + (envoi.ajoutees ? `, dont ${envoi.ajoutees} nouvelle(s) apportée(s) par toi.` : "."), GARDER_5S);
   } catch (erreur) {
     if (erreur.message === "pas-configure") {
-      afficherStatut("☁️ Le fichier partagé n'est pas encore réglé : ouvre « Réglages et notifications », partie « Prix partagés ».");
+      afficherStatut("☁️ Le fichier partagé n'est pas encore réglé : ouvre « Réglages et notifications », partie « Prix partagés ».", GARDER_5S);
     } else {
-      afficherStatut(`☁️ Mise à jour impossible : ${erreur.message}.`);
+      afficherStatut(`☁️ Mise à jour impossible : ${erreur.message}.`, GARDER_5S);
     }
   } finally {
     majPartageEnCours = false;
@@ -4321,17 +4511,13 @@ function rareteDepuisNom(texte) {
   return Object.keys(RARETES).find(rarete => RARETES[rarete].nom.toLowerCase() === cherche) || null;
 }
 
-let ficheEnCours = false;
-async function afficherPrixDansFiche() {
-  if (ficheEnCours) return;
-  // Le bouton « Mettre aux enchères » de la fiche (on ne fait que le repérer, on ne clique jamais dessus).
-  const bouton = [...document.querySelectorAll("button")].find(element =>
-    !estDansLePanneau(element) && estVisible(element) && /mettre aux ench[èe]res/i.test(element.textContent));
-  if (!bouton) return;
+// 1.19 : la fiche d'une carte (ouverte par-dessus la Collection) à partir d'un de ses boutons :
+// { fiche, nom, rarete }, ou null si elle ne se lit pas.
+function lireFicheCarte(bouton) {
   // La fiche : le premier parent qui contient le titre h2 (le nom de la carte).
   let fiche = bouton.parentElement;
   while (fiche && !fiche.querySelector("h2")) fiche = fiche.parentElement;
-  if (!fiche) return;
+  if (!fiche) return null;
   const nom = fiche.querySelector("h2").textContent.trim();
   let rarete = null;
   for (const element of fiche.querySelectorAll("span")) {
@@ -4351,7 +4537,20 @@ async function afficherPrixDansFiche() {
       if (trouve && RARETES[trouve[1]]) { rarete = trouve[1]; break; }
     }
   }
-  if (!rarete) return;
+  if (!rarete || !nom) return null;
+  return { fiche, nom, rarete };
+}
+
+let ficheEnCours = false;
+async function afficherPrixDansFiche() {
+  if (ficheEnCours) return;
+  // Le bouton « Mettre aux enchères » de la fiche (on ne fait que le repérer, on ne clique jamais dessus).
+  const bouton = [...document.querySelectorAll("button")].find(element =>
+    !estDansLePanneau(element) && estVisible(element) && /mettre aux ench[èe]res/i.test(element.textContent));
+  if (!bouton) return;
+  const lue = lireFicheCarte(bouton);
+  if (!lue) return;
+  const { nom, rarete } = lue;
 
   const ligne = bouton.parentElement; // la rangée « Mettre aux enchères » + « Défausser »
   // Corrigé en 1.8 : l'encart est cherché dans toute la page (il peut être rangé hors de la fiche) :
@@ -4404,6 +4603,7 @@ async function afficherPrixDansFiche() {
     // 1.17 : prix peut-être gonflé artificiellement (🎈), d'après l'historique des prix du site.
     const pic = reglages.marche ? picASignaler(await tendanceDe(nom, rarete)) : null;
     if (pic) encart.appendChild(creer("div", textePic(pic), "wmd-alerte-pic"));
+    if (reglages.marche) encart.appendChild(boutonReleverPrix(nom, rarete, lue.fiche)); // 1.20.1
     // 1.10 : le prix d'achat, si tu as remporté cette carte aux enchères.
     for (const achat of achatsDe(nom, rarete)) {
       encart.appendChild(creer("div", `🛒 Achetée aux enchères : ${texteAchat(achat)}${dateAchat(achat)}`
@@ -4760,7 +4960,12 @@ let derniereCarteCliquee = null;
 document.addEventListener("click", evenement => {
   try {
     const cible = evenement.target && evenement.target.closest ? evenement.target : null;
-    if (!cible || estDansLePanneau(cible) || cible.closest(".sheet-overlay, [role='dialog']")) return;
+    if (!cible || estDansLePanneau(cible)) return;
+    // Les clics dans une fiche sont ignorés, sauf dans les fenêtres qui montrent des cartes
+    // (1.20.2 : « Détail de l'échange », d'où s'ouvre la fiche de la carte cliquée).
+    const fenetre = cible.closest(".sheet-overlay, [role='dialog']");
+    const titreFenetre = fenetre && fenetre.querySelector("h2");
+    if (fenetre && !(titreFenetre && TITRES_PAS_UNE_CARTE.test(titreFenetre.textContent.trim()))) return;
     // Une carte de grille : un cadre arrondi qui contient un seul titre h3 (le nom).
     const cadre = cible.closest(".rounded-2xl");
     const titre = cadre && cadre.querySelectorAll("h3").length === 1 ? cadre.querySelector("h3") : null;
@@ -4776,6 +4981,41 @@ document.addEventListener("click", evenement => {
 // l'encart de prix n'existe pas : on ajoute seulement le bouton « Vérifier si un de mes amis la possède ».
 // 1.16 : et « 🛒 Voir au Marché si elle est en vente » (toutes les fiches, y compris ta liste de souhaits).
 let amisFicheEnCours = false;
+// 1.20.1 : « 📈 Relever son prix moyen » dans la fiche de n'importe quelle carte (échange, Toutes les cartes…).
+// L'extension demande au site l'historique des prix de la carte si elle connaît son identifiant ; sinon elle
+// ouvre l'onglet « Marché » de la fiche, et c'est le site qui le charge. Les prix de toutes les raretés sont
+// alors enregistrés (ou « ? » si le site n'en a pas).
+function boutonReleverPrix(nom, rarete, fiche) {
+  const bloc = creer("div", undefined, "wmd-relever-prix");
+  const bouton = creer("button", "📈 Relever son prix moyen maintenant", "wmd-chercher-marche");
+  bouton.type = "button";
+  bouton.title = "Lit l'historique des prix de cette carte sur le site (comme l'onglet « Marché » de sa fiche) et l'enregistre.";
+  const etat = creer("div", "", "wmd-discret");
+  bouton.addEventListener("click", async () => {
+    const debut = Date.now();
+    let carteId = cartesEchangeConnues.get(`${nom}|${rarete}`) || cartesEchangeConnues.get(nom) || null;
+    if (!carteId) for (const [id, n] of nomsDesCartes) if (memeNom(n, nom)) { carteId = id; break; }
+    if (carteId) {
+      demandesHistorique.set(carteId, rarete);
+      nomsDesCartes.set(carteId, nom);
+      window.postMessage({ source: "wmd-demande", version: 1, type: "lire-historique", id: carteId }, location.origin);
+    } else {
+      const onglet = [...fiche.querySelectorAll("button")].find(b => !estDeLExtension(b) && /^march[ée]$/i.test(b.textContent.trim()));
+      if (!onglet) { etat.textContent = "Onglet « Marché » de la fiche introuvable : ouvre-le toi-même, le prix sera enregistré."; return; }
+      onglet.click();
+    }
+    etat.textContent = "Lecture de l'historique des prix sur le site…";
+    const lu = await attendre(() => historiqueEnregistre && memeNom(historiqueEnregistre.nom, nom) && historiqueEnregistre.quand >= debut, 10 * SECONDE);
+    await pause(700); // le temps que la mémoire soit relue
+    const prix = (await prixParCarte()).get(`${nom}|${rarete}`);
+    etat.textContent = !lu ? "Pas de réponse du site : réessaie dans un instant."
+      : prix && prix.moyenne ? `Enregistré : ${nombreLisible(prix.estimation)} (prix moyen du site, ${RARETES[rarete].nom}).`
+      : "Enregistré : le site n'a pas de prix moyen pour cette rareté (« ? »).";
+  });
+  bloc.append(bouton, etat);
+  return bloc;
+}
+
 async function boutonAmisSurFiche() {
   if (amisFicheEnCours) return;
   amisFicheEnCours = true;
@@ -4785,8 +5025,13 @@ async function boutonAmisSurFiche() {
     amisFicheEnCours = false;
   }
 }
+const TITRES_PAS_UNE_CARTE = /^(d[ée]tail de l.[ée]change|proposer un [ée]change|contre-offre|nouvel? [ée]change)/i;
 async function majEncartAmisFiche() {
-  const titre = [...document.querySelectorAll(".sheet-overlay h2, [role='dialog'] h2")].find(h => !estDansLePanneau(h) && estVisible(h));
+  // 1.20.2 : les fenêtres du site qui ne sont pas des fiches de carte (« Détail de l'échange »…) sont ignorées,
+  // et la fenêtre du dessus (la dernière ouverte) l'emporte. Avant, la fiche d'une carte ouverte depuis le
+  // détail d'un échange recevait les boutons du titre « Détail de l'échange ».
+  const titre = [...document.querySelectorAll(".sheet-overlay h2, [role='dialog'] h2")]
+    .filter(h => !estDansLePanneau(h) && estVisible(h) && !TITRES_PAS_UNE_CARTE.test(h.textContent.trim())).pop();
   const ancien = document.getElementById("wmd-amis-fiche");
   if (!titre || document.getElementById("wmd-prix-fiche")) { if (ancien) ancien.remove(); return; }
   const fiche = titre.closest(".sheet-overlay, [role='dialog']");
@@ -4836,7 +5081,10 @@ async function majEncartAmisFiche() {
     bouton.addEventListener("click", () => verifierChezAmis(nom, rarete));
     const blocAmis = creer("div", undefined, "wmd-amis");
     blocAmis.append(bouton, creer("div", texteDerniereRechercheAmis(), "wmd-discret"));
-    if (prix && prix.moyenne) encart.appendChild(creer("b", `Prix moyen du site (${RARETES[rarete].nom}) : ${nombreLisible(prix.estimation)}`));
+    if (prix && prix.moyenne) encart.appendChild(creer("b", `Prix moyen du site (${RARETES[rarete].nom}) : ${nombreLisible(prix.estimation)}`
+      + (prix.moyenneLe ? ` (mis à jour le ${new Date(prix.moyenneLe).toLocaleDateString("fr-FR")})` : "")));
+    else if (dateSansMoyenne(nom, rarete)) encart.appendChild(creer("b", `Pas de prix moyen sur le site (vérifié le ${dateSansMoyenne(nom, rarete)})`));
+    if (reglages.marche) encart.appendChild(boutonReleverPrix(nom, rarete, fiche)); // 1.20.1
     if (prix && texteMarche(prix)) encart.appendChild(creer("div", texteMarche(prix)));
     if (pic) encart.appendChild(creer("div", textePic(pic), "wmd-alerte-pic"));
     encart.appendChild(blocAmis);
@@ -4947,6 +5195,15 @@ async function lireMesSouhaits(chasse) {
     if (!(await changerDePage(CONFIG.texteBoutonPageSuivante))) break;
   }
   if (!enCours) return abandonnerChasse("Recherche arrêtée.");
+  await api.storage.local.set({ mesSouhaits: { liste: souhaits, le: Date.now() } }).catch(() => {}); // 1.20 : gardée (« ⭐ Mes souhaits » du Marché)
+  if (chasse.seulementListe) { // 1.20 : « 🔄 Relire ma liste » : rien d'autre, retour au Marché
+    await api.storage.local.remove("chasse");
+    enCours = false;
+    afficherStatut(`⭐ Liste de souhaits relue : ${souhaits.length} carte(s). Retour au Marché…`, GARDER_5S);
+    await pause(SOUHAITS.pauseMs);
+    location.href = chasse.retour || PAGE_MARCHE;
+    return;
+  }
   if (souhaits.length === 0) return abandonnerChasse("Ta liste de souhaits est vide : rien à chercher.");
 
   await api.storage.local.set({ chasse: { etape: "amis", souhaits: souhaits, quand: Date.now() } });
@@ -5229,8 +5486,8 @@ async function marquerCartesEstimees() {
   if (!actif) {
     for (const { cadre } of cadres) {
       cadre.classList.remove("wmd-carte-prix"); delete cadre.dataset.wmdBadge;
-      const badgeMarche = cadre.querySelector(":scope > .wmd-badge-marche");
-      if (badgeMarche) badgeMarche.remove();
+      badgeDansPile(cadre, "wmd-badge-prix", null);
+      badgeDansPile(cadre, "wmd-badge-marche", null);
     }
     return;
   }
@@ -5246,27 +5503,21 @@ async function marquerCartesEstimees() {
       // 1.17 : « 🎈 » à côté du prix moyen quand il est peut-être gonflé par un pic.
       const picCarte = trouve && prix && prix.moyenne ? picASignaler(await tendanceDe(nom, trouve[1])) : null;
       const moyenne = prix && prix.moyenne ? nombreLisible(prix.estimation) + (picCarte ? " 🎈" : "") : null;
-      cadre.classList.toggle("wmd-carte-prix", moyenne !== null);
-      if (moyenne === null) delete cadre.dataset.wmdBadge;
-      else if (cadre.dataset.wmdBadge !== moyenne) cadre.dataset.wmdBadge = moyenne;
+      // 1.20 : « ? » = le site n'a pas de prix moyen pour cette carte (vérifié le …).
+      const verifieLe = moyenne === null && trouve ? dateSansMoyenne(nom, trouve[1]) : null;
+      const badge = moyenne !== null ? moyenne : verifieLe ? "?" : null;
+      cadre.classList.toggle("wmd-carte-prix", badge !== null);
+      const badgePrix = badgeDansPile(cadre, "wmd-badge-prix", badge === null ? null : badge === "?" ? "?" : "$" + badge);
+      if (badgePrix) badgePrix.classList.toggle("wmd-prix-inconnu", badge === "?");
       const marcheTexte = afficherMinMax && prix && prix.max !== null && prix.max !== undefined
         ? `-${nombreLisible(prix.min)} / +${nombreLisible(prix.max)}` : null;
-      let badgeMarche = cadre.querySelector(":scope > .wmd-badge-marche");
-      if (marcheTexte === null) { if (badgeMarche) badgeMarche.remove(); }
-      else {
-        if (!badgeMarche) {
-          badgeMarche = creer("span", undefined, "wmd-badge-marche");
-          cadre.appendChild(badgeMarche);
-        }
-        badgeMarche.classList.toggle("wmd-badge-marche-seul", moyenne === null);
-        // Le texte est dans un attribut (affiché par le CSS) : il ne gêne pas la lecture de la carte.
-        if (badgeMarche.dataset.texte !== marcheTexte) badgeMarche.dataset.texte = marcheTexte;
-      }
-      if (prix) {
-        const texte = [moyenne !== null ? `Prix moyen du site : ${nombreLisible(prix.estimation)}` : "Pas de prix moyen du site relevé",
+      badgeDansPile(cadre, "wmd-badge-marche", marcheTexte); // 1.20 : dans la colonne des repères
+      if (prix || verifieLe) {
+        const texte = [moyenne !== null ? `Prix moyen du site : ${nombreLisible(prix.estimation)} (mis à jour le ${prix.moyenneLe ? new Date(prix.moyenneLe).toLocaleDateString("fr-FR") : "?"})`
+          : verifieLe ? `Pas de prix moyen sur le site (vérifié le ${verifieLe})` : "Pas de prix moyen du site relevé",
           picCarte ? textePic(picCarte) : "",
           texteMarche(prix) || (afficherMinMax ? "aucun prix trouvé au Marché" : ""),
-          prix.minVendu !== null ? `vendue min ${nombreLisible(prix.minVendu)}` : "pas encore vue vendue"].filter(Boolean).join(" · ");
+          prix && prix.minVendu !== null && prix.minVendu !== undefined ? `vendue min ${nombreLisible(prix.minVendu)}` : "pas encore vue vendue"].filter(Boolean).join(" · ");
         if (cadre.dataset.wmdPrix !== texte) {
           cadre.dataset.wmdPrix = texte;
           cadre.title = `${texte} (WikiMasters Doublons)`;
@@ -5434,6 +5685,7 @@ api.storage.onChanged.addListener(changements => {
 // reparcourait TOUTES les annonces en mémoire (des milliers) : 100 cartes × 5 000 annonces à chaque passage.
 const indexAnnonces = { source: null, groupes: new Map() };
 function annoncesDeLaCarte(annonces, nom, rarete) {
+  if (!Array.isArray(annonces)) return [];
   if (indexAnnonces.source !== annonces) {
     indexAnnonces.groupes = new Map();
     for (const entree of annonces) {
@@ -5444,6 +5696,16 @@ function annoncesDeLaCarte(annonces, nom, rarete) {
     indexAnnonces.source = annonces;
   }
   return indexAnnonces.groupes.get(`${nom}|${rarete}`) || [];
+}
+// 1.17.8 : corrige « TypeError: annonces is not iterable ». Le cache peut être vidé (mise à jour des
+// prix du marché) pendant une attente ; chaque fonction garde donc sa propre copie de la liste.
+async function chargerAnnoncesEnCache() {
+  if (!annoncesEnCache) {
+    const { marche } = await api.storage.local.get("marche");
+    annoncesEnCache = Object.entries(marche && marche.annonces ? marche.annonces : {});
+    moyennesEnCache = marche && marche.moyennes ? marche.moyennes : {};
+  }
+  return annoncesEnCache;
 }
 function estimationSans(annonces, nom, rarete, cleExclue) {
   const liste = [];
@@ -5460,6 +5722,27 @@ function estimationSans(annonces, nom, rarete, cleExclue) {
   if (moyenne) estime = appliquerMoyenne(estime || { min: null, max: null, minVendu: null, nbTerminees: 0, nbEnCours: 0 }, moyenne);
   return estime && Object.assign(estime, { terminees: estime.nbTerminees, enCours: estime.nbEnCours,
     vuMax: vuMax, vuMoyenne: moyenne ? Number(moyenne.vu) || null : null });
+}
+
+// 1.20.4 : une enchère que TU as remportée (« Remportée par <toi> pour … », la page ouverte par la notification
+// du site) : un bouton pour retrouver la carte dans ta collection (la recherche du site, puis sa fiche).
+function gagneeParMoi(zone) {
+  if (!monPseudo) return false;
+  for (const element of zone.querySelectorAll("div, p")) {
+    if (estDeLExtension(element) || !/^\s*remport[ée]e par\b/i.test(element.textContent)) continue;
+    const lien = element.querySelector("a[href*='/profile/']");
+    if (lien && memePseudo(lien.textContent.trim(), monPseudo)) return true;
+  }
+  return false;
+}
+function boutonTrouverGagnee(nom, rarete) {
+  const bloc = creer("div", undefined, "wmd-gagnee");
+  const bouton = creer("button", "📚 Tu l'as gagnée : la trouver dans ma collection", "wmd-chercher-marche");
+  bouton.type = "button";
+  bouton.title = `Ouvre ta Collection (nouvel onglet), y cherche « ${nom} »${rarete ? ` (${lettreRarete(rarete)})` : ""} et ouvre sa fiche.`;
+  bouton.addEventListener("click", () => trouverCarte("collection", nom, rarete, false));
+  bloc.appendChild(bouton);
+  return bloc;
 }
 
 // Nouveau en 1.6.4 : sur la page d'UNE enchère (/marketplace/<id>), un encart sous le titre
@@ -5491,34 +5774,33 @@ async function majPrixSurEnchere() {
     || rareteBadgeShiny(zone);
   if (!nom) return;
   const bloc = titre.parentElement.parentElement; // le titre + « Mis en vente par »
+  const gagnee = gagneeParMoi(zone); // 1.20.4
   // 1.16 : relevé des prix coupé dans les réglages : l'encart ne garde que « 🛒 Voir les autres ventes au Marché ».
   if (!reglages.marche || !rarete) {
-    const signatureSeule = JSON.stringify(["seul", identifiant, nom, rarete || null]);
+    const signatureSeule = JSON.stringify(["seul", identifiant, nom, rarete || null, gagnee]);
     if (ancien && ancien.dataset.signature === signatureSeule && ancien.previousElementSibling === bloc) return;
     const seul = ancien || creer("div", undefined, "wmd-prix-fiche wmd-prix-enchere");
     seul.id = "wmd-prix-enchere";
     seul.dataset.signature = signatureSeule;
     seul.replaceChildren(blocVoirAuMarche(nom, rarete || null, { depuis: identifiant }));
+    if (gagnee) seul.prepend(boutonTrouverGagnee(nom, rarete || null));
     bloc.after(seul);
     return;
   }
   const cleAnnonce = "marketplace-auction-" + identifiant;
   const annonce = lireAnnonceDetail(identifiant)[0];
 
-  if (!annoncesEnCache) {
-    const { marche } = await api.storage.local.get("marche");
-    annoncesEnCache = Object.entries(marche ? marche.annonces : {});
-    moyennesEnCache = marche && marche.moyennes ? marche.moyennes : {};
-  }
-  const estime = estimationSans(annoncesEnCache, nom, rarete, cleAnnonce);
+  const annoncesConnues = await chargerAnnoncesEnCache(); // 1.17.8 : copie locale (voir chargerAnnoncesEnCache)
+  const estime = estimationSans(annoncesConnues, nom, rarete, cleAnnonce);
   const pic = picASignaler(await tendanceDe(nom, rarete)); // 1.17 : prix peut-être gonflé
-  const signature = JSON.stringify([identifiant, nom, rarete, estime, annonce ? [annonce.prix, annonce.terminee] : null, afficherMinMax, pic]);
+  const signature = JSON.stringify([identifiant, nom, rarete, estime, annonce ? [annonce.prix, annonce.terminee] : null, afficherMinMax, pic, gagnee]);
   if (ancien && ancien.dataset.signature === signature && ancien.previousElementSibling === bloc) return; // déjà à jour
 
   const encart = ancien || creer("div", undefined, "wmd-prix-fiche wmd-prix-enchere");
   encart.id = "wmd-prix-enchere";
   encart.dataset.signature = signature;
   encart.replaceChildren(blocVoirAuMarche(nom, rarete, { depuis: identifiant })); // 1.16 : en un clic, les autres ventes
+  if (gagnee) encart.prepend(boutonTrouverGagnee(nom, rarete));
   const nomRarete = RARETES[rarete] ? RARETES[rarete].nom : "?";
   if (estime) {
     encart.appendChild(creer("b", `Prix estimé (${nomRarete}) : ${texteEstimation(estime)}`));
@@ -5537,7 +5819,7 @@ async function majPrixSurEnchere() {
   if (pic) encart.appendChild(creer("div", textePic(pic), "wmd-alerte-pic"));
   // La même carte vue dans d'autres raretés : à titre indicatif seulement.
   const autres = Object.keys(RARETES).filter(r => r !== rarete)
-    .map(r => [r, estimationSans(annoncesEnCache, nom, r, cleAnnonce)]).filter(([, e]) => e)
+    .map(r => [r, estimationSans(annoncesConnues, nom, r, cleAnnonce)]).filter(([, e]) => e)
     .map(([r, e]) => `${RARETES[r].nom} : ${e.minimum ? "≥ " : ""}${nombreLisible(e.estimation)}`);
   if (autres.length) encart.appendChild(creer("div", `Vue dans une autre rareté (prix non comparable) : ${autres.join(", ")}.`, "wmd-discret"));
   bloc.after(encart);
@@ -5618,15 +5900,18 @@ function afficherEcart(cadre, annonce, moyenne) {
   let niveau = 0;
   const ecart = moyenne && moyenne.prix > 0 && !annonce.terminee && Number.isFinite(annonce.prix) ? annonce.prix - moyenne.prix : 0;
   if (marcheEcarts.actif) for (const seuil of marcheEcarts.seuils) if (Math.abs(ecart) >= seuil) niveau++;
-  if (!niveau) {
+  // 1.20 : pas de prix moyen sur le site (vérifié) : « ? », avec la date de la vérification.
+  const verifieLe = !(moyenne && moyenne.prix > 0) && annonce.rarete !== "inconnue" ? dateSansMoyenne(annonce.nom, annonce.rarete) : null;
+  if (!niveau && !verifieLe) {
     if (marque) marque.remove();
     cadre.classList.remove("wmd-avec-ecart");
     return;
   }
-  const texte = "+".repeat(niveau);
-  const sens = ecart < 0 ? "moins-cher" : "plus-cher";
-  const titre = `Mise ${nombreLisible(annonce.prix)} : ${nombreLisible(Math.abs(ecart))} wikibidous `
-    + (ecart < 0 ? "SOUS" : "AU-DESSUS DU") + ` prix moyen du site (${nombreLisible(moyenne.prix)})`;
+  const texte = niveau ? "+".repeat(niveau) : "?";
+  const sens = !niveau ? "inconnu" : ecart < 0 ? "moins-cher" : "plus-cher";
+  const titre = !niveau ? `Pas de prix moyen sur le site pour cette carte (vérifié le ${verifieLe})`
+    : `Mise ${nombreLisible(annonce.prix)} : ${nombreLisible(Math.abs(ecart))} wikibidous `
+    + (ecart < 0 ? "SOUS" : "AU-DESSUS DU") + ` prix moyen du site (${nombreLisible(moyenne.prix)}, mis à jour le ${dateMoyenne(moyenne)})`;
   if (!marque) {
     marque = creer("span", undefined, "wmd-ecart");
     cadre.appendChild(marque);
@@ -5702,16 +5987,13 @@ async function marquerBonnesAffaires() {
   }
   affairesEnCours = true;
   try {
-    if (!annoncesEnCache) {
-      const { marche } = await api.storage.local.get("marche");
-      annoncesEnCache = Object.entries(marche ? marche.annonces : {});
-    moyennesEnCache = marche && marche.moyennes ? marche.moyennes : {};
-    }
+    const annoncesConnues = await chargerAnnoncesEnCache(); // 1.17.8
     if (!tendancesEnCache) tendancesEnCache = (await api.storage.local.get("tendances")).tendances || {};
+    const tendancesConnues = tendancesEnCache || {}; // 1.17.8 : copie locale
     for (const annonce of lireAnnoncesMarche(true)) {
       const cadre = annonce.cadre.closest("[id^='marketplace-auction-']") || annonce.cadre;
       const estime = !annonce.terminee && annonce.rarete !== "inconnue"
-        ? estimationSans(annoncesEnCache, annonce.nom, annonce.rarete, annonce.cle) : null;
+        ? estimationSans(annoncesConnues, annonce.nom, annonce.rarete, annonce.cle) : null;
       // 1.7.6 : deux sortes de cadres.
       //  - jaune → rouge : la mise est à 75 % ou moins du PRIX MOYEN du site (toujours prioritaire) ;
       //  - blanc → bleu : sinon, la mise est à 75 % ou moins du prix le plus HAUT trouvé au Marché.
@@ -5734,7 +6016,7 @@ async function marquerBonnesAffaires() {
       const type = okMoyenne ? "moyenne" : okMax ? "max" : null;
       const affaire = type !== null;
       const rapport = type === "moyenne" ? rapportMoyen : rapportMax;
-      const tendance = annonce.rarete !== "inconnue" ? tendancesEnCache[`${annonce.nom}|${annonce.rarete}`] : null;
+      const tendance = annonce.rarete !== "inconnue" ? tendancesConnues[`${annonce.nom}|${annonce.rarete}`] : null;
       const pic = picASignaler(tendance); // 1.17 : prix peut-être gonflé (🎈), sur toutes les cartes
       const icones = [];
       if (cadre.classList.contains("wmd-bonne-affaire") !== affaire) cadre.classList.toggle("wmd-bonne-affaire", affaire);
@@ -6827,6 +7109,33 @@ function achatDans(zone, memo) {
 }
 
 // Sur ta Collection : le badge orange « 🛒 450 » des cartes achetées aux enchères.
+// 1.20 : les repères de l'extension sur une carte de la Collection sont rangés dans UNE colonne, en haut à
+// droite SOUS l'étoile des favoris : ils ne se superposent plus jamais, ni entre eux, ni sur l'étoile.
+// Ordre : prix moyen ($ ou ?), prix du Marché, prix d'achat 🛒, étiquette suggérée.
+function pileDe(cadre, creerSiBesoin = true) {
+  let pile = cadre.querySelector(":scope > .wmd-pile");
+  if (!pile && creerSiBesoin) {
+    pile = creer("div", undefined, "wmd-pile");
+    cadre.appendChild(pile);
+  }
+  return pile;
+}
+function badgeDansPile(cadre, classe, texte) {
+  const pile = pileDe(cadre, texte !== null);
+  let badge = pile ? pile.querySelector(`:scope > .${classe}`) : null;
+  if (texte === null) {
+    if (badge) badge.remove();
+    if (pile && !pile.children.length) pile.remove();
+    return null;
+  }
+  if (!badge) {
+    badge = creer("span", undefined, classe);
+    pile.appendChild(badge);
+  }
+  if (badge.dataset.texte !== texte) badge.dataset.texte = texte;
+  return badge;
+}
+
 let marquageAchatsEnCours = false;
 function marquerAchats() {
   if (marquageAchatsEnCours) return;
@@ -6834,20 +7143,14 @@ function marquerAchats() {
   try {
     const actif = pageActuelle() === "collection";
     for (const { cadre, imageRarete } of trouverCadresDeCartes()) {
-      let badge = cadre.querySelector(":scope > .wmd-badge-achat");
       const nom = cadre.querySelector(CONFIG.selecteurNomCarte).textContent.trim();
       const trouve = imageRarete.getAttribute("src").match(/rarity\/([a-z_]+)\./);
       const liste = actif && trouve ? achatsDe(nom, trouve[1]) : [];
-      if (!liste.length) { if (badge) badge.remove(); continue; }
+      if (!liste.length) { badgeDansPile(cadre, "wmd-badge-achat", null); continue; }
       const texte = `🛒 ${texteAchat(liste[0])}${liste.length > 1 ? ` (+${liste.length - 1})` : ""}`;
-      if (!badge) {
-        badge = creer("span", undefined, "wmd-badge-achat");
-        cadre.appendChild(badge);
-      }
-      if (badge.dataset.texte !== texte) {
-        badge.dataset.texte = texte;
-        badge.title = "Acheté aux enchères : " + liste.map(a => `${texteAchat(a)}${dateAchat(a)}`).join(", ");
-      }
+      const badge = badgeDansPile(cadre, "wmd-badge-achat", texte);
+      const titre = "Acheté aux enchères : " + liste.map(a => `${texteAchat(a)}${dateAchat(a)}`).join(", ");
+      if (badge.title !== titre) badge.title = titre;
     }
   } finally {
     marquageAchatsEnCours = false;
@@ -6883,6 +7186,7 @@ window.addEventListener("message", evenement => {
   const donnees = evenement.data;
   if (!donnees || donnees.source !== "wmd-reponses-site" || donnees.version !== 1 || !extensionValide()) return;
   if (donnees.historique) { recevoirHistorique(donnees.historique); return; } // 1.16 : prix moyens de toutes les raretés
+  if (donnees.cartesEchange) { retenirCartesEchange(donnees.cartesEchange); return; } // 1.20 : les cartes des échanges
   fileReponsesSite = fileReponsesSite.then(() => recevoirReponseSite(donnees))
     .catch(erreur => { if (extensionValide()) console.warn("[WikiMasters Doublons]", erreur); });
 });
@@ -6923,36 +7227,42 @@ async function apprendreIdentite(miennes) {
 }
 
 // ---------------------------------------------------------------------
-//  1.17.3 : REMETTRE EN VENTE LES CARTES INVENDUES (versions complètes seulement)
-//  L'extension note tes ventes (onglet « Mes ventes » du Marché, d'après ce que le site lui envoie) :
-//  la mise de départ, et la durée choisie (lue au moment où tu cliques « Lancer l'enchère », ou
-//  calculée avec le début et la fin de l'enchère). Une vente finie sans aucune mise est « invendue ».
-//  Le bouton « 🔁 Remettre en vente les invendues » (après confirmation) ouvre ta Collection, cherche
-//  chaque carte, clique « Mettre aux enchères », remet la même mise de départ et la même durée,
-//  puis « Lancer l'enchère ». C'est la seule action de l'extension qui crée quelque chose sur le site :
-//  elle ne part jamais toute seule, et s'arrête à la limite d'enchères actives du site (« 4/5 »).
+//  1.17.5 : REVENDRE UNE CARTE SI ELLE N'EST PAS VENDUE (versions complètes seulement)
+//  Dans la fenêtre « Mettre aux enchères » du site, une case de l'extension :
+//  « 🔁 La remettre en vente (même prix, même durée) si elle n'est pas vendue ».
+//  Seules les ventes où TU as coché la case sont concernées, une par une. À la fin de l'enchère,
+//  l'extension relit cette enchère sur le site (comme sa page le fait) : s'il n'y a eu AUCUNE mise,
+//  elle remet la carte aux enchères (Collection → « Mettre aux enchères » → même mise de départ,
+//  même durée → « Lancer l'enchère »), avec la case à nouveau cochée. Au moindre doute (mise vue,
+//  gagnant, résultat illisible), elle ne fait rien. « Annuler et récupérer ma carte » sur la page
+//  de l'enchère annule la revente de cette carte, et ✕ dans le panneau aussi.
 // ---------------------------------------------------------------------
 const REMISE_EN_VENTE = false; // false dans la version « sans chargement automatique »
 const DUREES_VENTE = [[10, "10 min"], [30, "30 min"], [60, "1 h"], [180, "3 h"], [360, "6 h"], [720, "12 h"]];
-const DUREE_VENTE_INCONNUE = 60; // durée utilisée si celle d'origine n'a pas pu être connue
-function dureeVenteProche(minutes) {
-  if (!(minutes > 0)) return null;
-  return DUREES_VENTE.reduce((meilleure, [m]) => Math.abs(Math.log(m / minutes)) < Math.abs(Math.log(meilleure / minutes)) ? m : meilleure, DUREES_VENTE[0][0]);
-}
 const texteDureeVente = minutes => (DUREES_VENTE.find(([m]) => m === minutes) || [0, `${minutes} min`])[1];
 
-let mesVentes = {};          // id de l'enchère → { nom, rarete, depart, duree, fin, etat, vu }
-let remiseEnVente = null;    // { file: [ids], faites, erreurs, quand } pendant une remise en vente
-api.storage.local.get(["mesVentes", "remiseEnVente"]).then(lu => {
-  mesVentes = lu.mesVentes || {};
-  remiseEnVente = lu.remiseEnVente || null;
-}).catch(() => {});
+// La file des reventes : { cle: { nom, rarete, depart, duree, quand, id, fin, etat, essais, note } }
+//  etat : "attente" (enchère pas encore reconnue), "suivie" (en cours), "a-revendre", "revente" (en cours de remise).
+let reventes = {};
+if (!REMISE_EN_VENTE) api.storage.local.remove(["mesVentes", "remiseEnVente", "reventes"]).catch(() => {});
+else api.storage.local.remove(["mesVentes", "remiseEnVente"]).catch(() => {}); // l'ancienne remise en vente (1.17.4), retirée
+if (REMISE_EN_VENTE) api.storage.local.get("reventes").then(lu => { reventes = lu.reventes || {}; }).catch(() => {});
 api.storage.onChanged.addListener(changements => {
-  if (changements.mesVentes) mesVentes = changements.mesVentes.newValue || {};
-  if (changements.remiseEnVente) remiseEnVente = changements.remiseEnVente.newValue || null;
+  if (changements.reventes) reventes = changements.reventes.newValue || {};
 });
+// Chaque modification passe par ici, une à la fois (plusieurs onglets peuvent être ouverts).
+function modifierReventes(tache) {
+  const faire = async () => {
+    const { reventes: memo = {} } = await api.storage.local.get("reventes");
+    const resultat = await tache(memo);
+    await api.storage.local.set({ reventes: memo });
+    reventes = memo;
+    return resultat;
+  };
+  return navigator.locks && navigator.locks.request ? navigator.locks.request("wmd-reventes", faire) : faire();
+}
 
-// Au clic sur « Lancer l'enchère » (le tien ou celui de l'extension) : la mise et la durée choisies.
+// La fenêtre « Mettre aux enchères » du site, lue.
 function fenetreMiseEnVente() {
   const titre = [...document.querySelectorAll("h2")].find(h => /^mettre aux ench[èe]res$/i.test(h.textContent.trim()) && !estDansLePanneau(h) && estVisible(h));
   let zone = titre ? titre.parentElement : null;
@@ -6961,8 +7271,9 @@ function fenetreMiseEnVente() {
   const nomCarte = zone.querySelector("p.font-semibold") || zone.querySelector("h3");
   const ligneRarete = [...zone.querySelectorAll("p")].map(p => p.textContent.trim()).find(t => /^march[ée]\s*·\s*/i.test(t));
   const actives = [...zone.querySelectorAll("p")].map(p => p.textContent.trim().match(/^ench[èe]res actives\s*:\s*(\d+)\s*\/\s*(\d+)/i)).find(Boolean);
-  const boutons = [...zone.querySelectorAll("button")];
-  const dureeChoisie = boutons.find(b => DUREES_VENTE.some(([, t]) => t === b.textContent.trim()) && /bg-\[var\(--color-accent\)\]/.test(b.className));
+  const boutons = [...zone.querySelectorAll("button")].filter(b => !estDeLExtension(b));
+  const boutonsDuree = boutons.filter(b => DUREES_VENTE.some(([, t]) => t === b.textContent.trim()));
+  const dureeChoisie = boutonsDuree.find(b => /(^|\s)bg-\[var\(--color-accent\)\]/.test(b.className));
   return {
     zone: zone,
     nom: nomCarte ? nomCarte.textContent.trim() : null,
@@ -6970,159 +7281,783 @@ function fenetreMiseEnVente() {
     champ: zone.querySelector('input[aria-label="Mise de départ"]'),
     actives: actives ? Number(actives[1]) : null,
     maxActives: actives ? Number(actives[2]) : null,
-    duree: dureeChoisie ? (DUREES_VENTE.find(([, t]) => t === dureeChoisie.textContent.trim()) || [null])[0] : null,
-    boutonDuree: minutes => boutons.find(b => b.textContent.trim() === texteDureeVente(minutes)) || null,
+    duree: dureeChoisie ? DUREES_VENTE.find(([, t]) => t === dureeChoisie.textContent.trim())[0] : null,
+    zoneDurees: boutonsDuree.length ? boutonsDuree[0].parentElement : null,
+    boutonDuree: minutes => boutonsDuree.find(b => b.textContent.trim() === texteDureeVente(minutes)) || null,
     lancer: boutons.find(b => /^lancer l'ench[èe]re$/i.test(b.textContent.trim())) || null,
     annuler: boutons.find(b => b.textContent.trim() === "Annuler") || null
   };
 }
-let derniereMiseEnVente = null; // { nom, rarete, depart, duree, quand }
+
+// La case, ajoutée sous les durées de la fenêtre « Mettre aux enchères ». Toujours décochée à l'ouverture.
+function caseRevente() {
+  if (!REMISE_EN_VENTE || !reglages.marche) return;
+  const fenetre = fenetreMiseEnVente();
+  if (!fenetre || !fenetre.zoneDurees || fenetre.zone.querySelector(".wmd-case-revente")) return;
+  const etiquette = creer("label", undefined, "wmd-case-revente");
+  const coche = creer("input");
+  coche.type = "checkbox";
+  etiquette.append(coche, document.createTextNode(" 🔁 La remettre en vente (même prix, même durée) si elle n'est pas vendue"));
+  etiquette.title = "WikiMasters Doublons : à la fin de l'enchère, s'il n'y a eu aucune mise, l'extension la remet aux enchères "
+    + "au même prix de départ et pour la même durée. « Annuler et récupérer ma carte » annule la revente.";
+  fenetre.zoneDurees.after(etiquette);
+}
+
+// Au clic sur « Lancer l'enchère » (le tien ou celui de l'extension), case cochée : la vente est notée.
 document.addEventListener("click", evenement => {
   const bouton = evenement.target instanceof Element ? evenement.target.closest("button") : null;
   if (!REMISE_EN_VENTE || !bouton || !/^lancer l'ench[èe]re$/i.test(bouton.textContent.trim())) return;
   const fenetre = fenetreMiseEnVente();
-  if (!fenetre || !fenetre.nom) return;
-  derniereMiseEnVente = { nom: fenetre.nom, rarete: fenetre.rarete, depart: lirePrix(fenetre.champ.value), duree: fenetre.duree, quand: Date.now() };
-  api.storage.local.set({ derniereMiseEnVente: derniereMiseEnVente }).catch(() => {});
+  const coche = fenetre && fenetre.zone.querySelector(".wmd-case-revente input");
+  if (!fenetre || !coche || !coche.checked || !fenetre.nom || !fenetre.rarete || !fenetre.duree) return;
+  const depart = lirePrix(fenetre.champ.value);
+  if (!(depart > 0)) return;
+  const quand = Date.now();
+  modifierReventes(memo => {
+    memo[`attente-${quand}`] = { nom: fenetre.nom, rarete: fenetre.rarete, depart: depart, duree: fenetre.duree, quand: quand,
+      id: null, fin: null, etat: "attente", essais: 0, note: "" };
+  }).catch(() => {});
 }, true);
 
-// Les enchères reçues du site dont tu es le vendeur : rangées dans « mesVentes ».
-async function noterMesVentes(encheres) {
-  if (!REMISE_EN_VENTE || !monId) return;
-  const miennes = encheres.filter(e => e.vendeurId === monId && e.nom && e.fin);
-  if (!miennes.length) return;
-  const { mesVentes: memo = {}, derniereMiseEnVente: derniere } = await api.storage.local.get(["mesVentes", "derniereMiseEnVente"]);
+// « Annuler et récupérer ma carte » sur la page d'une enchère : sa revente est annulée.
+document.addEventListener("click", evenement => {
+  const bouton = evenement.target instanceof Element ? evenement.target.closest("button") : null;
+  if (!REMISE_EN_VENTE || !bouton || !/annuler et r[ée]cup[ée]rer ma carte/i.test(bouton.textContent)) return;
+  const enchere = location.pathname.match(REGEX_PAGE_ENCHERE);
+  if (!enchere) return;
+  const id = enchere[1].toLowerCase();
+  modifierReventes(memo => { for (const [cle, r] of Object.entries(memo)) if (r.id === id) delete memo[cle]; }).catch(() => {});
+}, true);
+
+// Les enchères reçues du site : on reconnaît les ventes notées, et on suit leur résultat.
+async function suivreReventes(encheres) {
+  if (!REMISE_EN_VENTE || !Object.keys(reventes).length) return;
+  await modifierReventes(memo => {
+    for (const [cle, r] of Object.entries(memo)) {
+      if (r.etat !== "attente") continue;
+      // Ta vente : même carte, même mise de départ, fin ≈ clic + durée (à 5 min près), pas déjà suivie.
+      // 1.17.7 : la réponse du site à « Lancer l'enchère » n'a pas toujours le nom de la carte : alors la mise
+      // de départ et l'heure de fin (à 3 min près) suffisent, si c'est bien ta vente.
+      const e = encheres.find(x => x.depart === r.depart && x.fin && x.statut !== "cancelled"
+        && (x.nom ? memeNom(x.nom, r.nom) && Math.abs(x.fin - (r.quand + r.duree * MINUTE)) < 5 * MINUTE
+          : Math.abs(x.fin - (r.quand + r.duree * MINUTE)) < 3 * MINUTE && monId && x.vendeurId === monId)
+        && (!monId || !x.vendeurId || x.vendeurId === monId)
+        && !Object.values(memo).some(autre => autre.id === x.id));
+      if (e) { r.id = e.id; r.fin = e.fin; r.etat = "suivie"; continue; }
+      if (Date.now() - r.quand > r.duree * MINUTE + 60 * MINUTE) delete memo[cle]; // jamais reconnue : oubliée
+    }
+    for (const r of Object.values(memo)) {
+      const e = r.id && encheres.find(x => x.id === r.id);
+      if (e && /cancel|annul/i.test(e.statut || "")) r.etat = "annulee";
+      if (e && (e.mise > 0 || e.meneurId || e.gagnantId || e.prixFinal > 0)) r.vueAvecMise = true; // une mise : elle est (sera) vendue
+      if (e && e.fin) r.fin = e.fin;
+    }
+    for (const [cle, r] of Object.entries(memo)) if (r.etat === "annulee" || (r.vueAvecMise && r.etat === "suivie")) delete memo[cle];
+  });
+}
+
+// Demande au site l'état d'une enchère (comme sa page le fait) : la réponse passe par reponses-site.js.
+function relireEnchere(id) {
+  window.postMessage({ source: "wmd-demande", version: 1, type: "lire-enchere", id: id }, location.origin);
+}
+
+// Toutes les 5 s : une vente suivie dont la fin est passée → relue sur le site, puis décision.
+let reventesOccupees = false;
+let derniereLectureVentes = 0;
+async function surveillerReventes() {
+  if (!REMISE_EN_VENTE || reventesOccupees || !reglages.marche) return;
   const maintenant = Date.now();
-  let change = false;
-  for (const e of miennes) {
-    const ancienne = memo[e.id] || {};
-    let duree = ancienne.duree || dureeVenteProche(e.dureeMin) || (e.debut ? dureeVenteProche((e.fin - e.debut) / MINUTE) : null);
-    // La mise en vente vue au clic : même carte, même mise de départ, fin ≈ clic + durée.
-    if (!duree && derniere && derniere.duree && memeNom(derniere.nom, e.nom) && derniere.depart === e.depart
-      && Math.abs(e.fin - (derniere.quand + derniere.duree * MINUTE)) < 5 * MINUTE) duree = derniere.duree;
-    const vendue = Boolean(e.gagnantId) || e.prixFinal > 0 || e.mise > 0;
-    const finie = e.statut !== "active" || e.fin < maintenant - 30 * SECONDE;
-    const etat = vendue ? (finie ? "vendue" : "active") : finie ? (ancienne.etat === "remise" ? "remise" : "invendue") : "active";
-    const nouvelle = { nom: e.nom, rarete: rareteDuSite(e.rarete) || ancienne.rarete || "inconnue", depart: e.depart, duree: duree || null,
-      fin: e.fin, etat: etat, vu: maintenant };
-    if (JSON.stringify({ ...ancienne, vu: 0 }) !== JSON.stringify({ ...nouvelle, vu: 0 })) change = true;
-    memo[e.id] = nouvelle;
+  // 1.17.7 : une vente pas encore reconnue (par exemple remise en vente par l'extension depuis la Collection) :
+  // l'extension relit tes ventes sur le site, comme le Marché le fait en s'ouvrant (au plus toutes les 2 minutes).
+  if (Object.values(reventes).some(r => r.etat === "attente" && maintenant - r.quand > 15 * SECONDE)
+    && maintenant - derniereLectureVentes > 2 * MINUTE && !document.hidden) {
+    derniereLectureVentes = maintenant;
+    window.postMessage({ source: "wmd-demande", version: 1, type: "lire-ventes" }, location.origin);
   }
-  // Une invendue que tu as déjà remise en vente toi-même (même carte, enchère plus récente) n'est plus proposée.
-  for (const v of Object.values(memo)) {
-    if (v.etat === "invendue" && Object.values(memo).some(w => w !== v && w.fin > v.fin && w.nom === v.nom && w.rarete === v.rarete)) { v.etat = "remise"; change = true; }
+  const suivies = Object.entries(reventes).filter(([, r]) => r.etat === "suivie" && r.id && r.fin && r.fin < maintenant - 45 * SECONDE);
+  if (!suivies.length) return;
+  reventesOccupees = true;
+  try {
+    for (const [cle, r] of suivies) {
+      if (r.relueA && maintenant - r.relueA < 2 * MINUTE) continue; // une relecture toutes les 2 minutes au plus
+      relireEnchere(r.id);
+      await pause(3000);
+      const e = encheresDuSite.get(r.id);
+      const m = misesDuSite.get(r.id);
+      await modifierReventes(memo => {
+        const v = memo[cle];
+        if (!v) return;
+        v.relueA = Date.now();
+        v.essais = (v.essais || 0) + 1;
+        // Relue après la fin, et c'est bien la même vente (même carte, même mise de départ).
+        const fraiche = e && e.vuLe > v.fin && e.depart === v.depart && (!e.nom || memeNom(e.nom, v.nom));
+        if (!fraiche) {
+          v.note = "résultat pas encore lu sur le site";
+          if (v.essais >= 15) delete memo[cle]; // une demi-heure sans réponse : abandon
+          return;
+        }
+        if (/cancel|annul/i.test(e.statut || "")) { delete memo[cle]; return; }
+        const misesConnues = m && m.vuLe > v.fin ? m.mises : null;
+        const vendue = e.mise > 0 || e.meneurId || e.gagnantId || e.prixFinal > 0 || (misesConnues && misesConnues.length > 0);
+        if (vendue) { delete memo[cle]; return; }
+        // Au moindre doute, rien : « aucune mise » doit être écrit noir sur blanc par le site.
+        // Il faut l'historique des mises de l'enchère, relu après la fin, et vide.
+        if (!misesConnues) {
+          v.note = "historique des mises pas encore lu";
+          if (v.essais >= 15) delete memo[cle];
+          return;
+        }
+        if (!(e.mise === null && misesConnues.length === 0)) { delete memo[cle]; return; }
+        if (e.statut === "active" && e.fin > Date.now()) { v.fin = e.fin; return; } // prolongée
+        v.etat = "a-revendre"; // aucune mise, enchère finie : à remettre en vente
+        v.note = "";
+      });
+    }
+  } finally {
+    reventesOccupees = false;
   }
-  for (const [id, v] of Object.entries(memo)) if (maintenant - v.fin > 14 * 24 * 3600 * 1000) { delete memo[id]; change = true; }
-  if (change) await api.storage.local.set({ mesVentes: memo });
 }
 
-function ventesInvendues() {
-  return Object.entries(mesVentes).filter(([, v]) => v.etat === "invendue" && v.depart > 0 && RARETES[v.rarete])
-    .sort((a, b) => a[1].fin - b[1].fin);
+// 1.19 : pas de remise en vente pendant une action longue de l'extension (lecture de la collection page
+// par page, recherche des doublons, des cartes manquantes ou animées, souhaits chez les amis, prix partagés,
+// import d'un fichier…), ni dans les 20 secondes qui suivent, et cela dans TOUS les onglets : l'onglet occupé
+// le signale aux autres par la mémoire de l'extension (« actionLongue », renouvelée toutes les 5 secondes).
+function actionLongueIci() {
+  return enCours || tacheEnCours || chasseEnCours || majPartageEnCours || preparationEnCours || (moyenneEnCours && releveEnCours);
+}
+let derniereActionLongueIci = 0, dernierSignalActionLongue = 0, actionLongueAilleurs = 0;
+api.storage.local.get("actionLongue").then(({ actionLongue }) => { actionLongueAilleurs = Number(actionLongue) || 0; }).catch(() => {});
+api.storage.onChanged.addListener(changements => {
+  if (changements.actionLongue) actionLongueAilleurs = Number(changements.actionLongue.newValue) || 0;
+});
+function signalerActionLongue() {
+  if (!REMISE_EN_VENTE || !actionLongueIci()) return;
+  derniereActionLongueIci = Date.now();
+  if (Date.now() - dernierSignalActionLongue < 5 * SECONDE) return;
+  dernierSignalActionLongue = Date.now();
+  api.storage.local.set({ actionLongue: Date.now() }).catch(() => {});
+}
+function actionLongueEnCours() {
+  if (actionLongueIci()) return true;
+  const chasseActive = chasseConnue && Date.now() - (Number(chasseConnue.quand) || 0) <= 30 * MINUTE;
+  return Boolean(chasseActive) || Date.now() - Math.max(derniereActionLongueIci, actionLongueAilleurs) < 20 * SECONDE;
 }
 
-// Le bouton du panneau : lancer (après confirmation) ou arrêter.
-async function boutonRemiseEnVente() {
-  if (remiseEnVente) {
-    await api.storage.local.remove("remiseEnVente");
-    remiseEnVente = null;
-    afficherStatut("🔁 Remise en vente arrêtée.");
+// La remise en vente elle-même : dans un onglet de la Collection. Si aucun onglet ne s'en charge,
+// l'onglet libre (visible, rien en cours, aucune fenêtre du site ouverte) va sur la Collection, puis revient.
+let remiseOccupee = false;
+let dernierAvisAttenteRevente = 0;
+async function poursuivreReventes() {
+  if (!REMISE_EN_VENTE || remiseOccupee || document.hidden || carteATrouverEnCours || !reglages.marche) return;
+  const aFaire = Object.entries(reventes).find(([, r]) => r.etat === "a-revendre" || (r.etat === "revente" && Date.now() - (r.debutRevente || 0) > 2 * MINUTE));
+  if (!aFaire) return;
+  if (actionLongueEnCours()) { // 1.19 : elle attend la fin de l'action en cours (ici ou dans un autre onglet)
+    const texte = `🔁 « ${aFaire[1].nom} » sera remise en vente quand l'extension aura fini l'action en cours.`;
+    if (!actionLongueIci() && Date.now() - dernierAvisAttenteRevente > MINUTE) { dernierAvisAttenteRevente = Date.now(); afficherStatut(texte); }
     return;
   }
-  const liste = ventesInvendues();
-  if (!liste.length) return afficherStatut("🔁 Aucune carte invendue connue. Ouvre l'onglet « Mes ventes » ou « Historique » du Marché.");
-  // 1.17.4 : sans confirmation (demandé) : le clic lance directement ; le même bouton l'arrête.
-  const inconnues = liste.filter(([, v]) => !v.duree).length;
-  afficherStatut(`🔁 Remise en vente de ${liste.length} carte(s) invendue(s), même mise de départ et même durée`
-    + (inconnues ? ` (${inconnues} à durée d'origine inconnue : ${texteDureeVente(DUREE_VENTE_INCONNUE)})` : "") + "…");
-  remiseEnVente = { file: liste.map(([id]) => id), faites: 0, erreurs: [], quand: Date.now() };
-  await api.storage.local.set({ remiseEnVente: remiseEnVente });
-  if (pageActuelle() !== "collection") location.assign(ADRESSES_PAGES.collection);
-}
-
-// Sur la Collection, une carte à la fois. Tourne toutes les secondes, ne fait rien sans remise en cours.
-let remiseOccupee = false;
-async function poursuivreRemiseEnVente() {
-  if (!REMISE_EN_VENTE || !remiseEnVente || remiseOccupee || pageActuelle() !== "collection" || pageOccupee() || carteATrouverEnCours) return;
-  if (Date.now() - remiseEnVente.quand > 30 * MINUTE) { await api.storage.local.remove("remiseEnVente"); return; }
+  if (pageActuelle() !== "collection") {
+    if (document.querySelector('[role="dialog"], .sheet-overlay') || (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName))) return;
+    const { retourRevente } = await api.storage.local.get("retourRevente");
+    if (retourRevente && Date.now() - retourRevente.quand < 2 * MINUTE) return; // un autre onglet s'en occupe
+    await api.storage.local.set({ retourRevente: { adresse: location.href, quand: Date.now() } });
+    memoireOnglet("wmd-revente-ici", "1"); // le chargement automatique de cet onglet ne s'arrête pas pour ça
+    afficherStatut(`🔁 « ${aFaire[1].nom} » n'a pas été vendue : direction ta Collection pour la remettre en vente…`);
+    location.assign(ADRESSES_PAGES.collection);
+    return;
+  }
   if (!champDeRecherche()) return; // la page se charge encore
   remiseOccupee = true;
-  const finir = async texte => {
-    await api.storage.local.remove("remiseEnVente");
-    remiseEnVente = null;
-    afficherStatut(texte);
+  const [cle, r] = aFaire;
+  const echec = async raison => {
+    await modifierReventes(memo => { delete memo[cle]; });
+    afficherStatut(`🔁 « ${r.nom} » n'a pas pu être remise en vente : ${raison}.`);
   };
   try {
-    const etat = remiseEnVente;
-    const id = etat.file[0];
-    if (!id) {
-      return finir(`🔁 Remise en vente terminée : ${etat.faites} carte(s) remise(s) aux enchères`
-        + (etat.erreurs.length ? ` ; pas remises : ${etat.erreurs.join(" ; ")}.` : "."));
-    }
-    const v = mesVentes[id];
-    const suivante = async (reussie, erreur) => {
-      if (!remiseEnVente) return; // Stop pendant ce temps
-      if (reussie) {
-        etat.faites++;
-        const { mesVentes: memo = {} } = await api.storage.local.get("mesVentes");
-        if (memo[id]) { memo[id].etat = "remise"; await api.storage.local.set({ mesVentes: memo }); }
-      } else if (erreur) etat.erreurs.push(erreur);
-      etat.file.shift();
-      etat.quand = Date.now();
-      await api.storage.local.set({ remiseEnVente: etat });
-    };
-    if (!v || v.etat !== "invendue") return suivante(false, null);
-    const reste = etat.file.length;
-    afficherStatut(`🔁 Remise en vente (${reste} restante(s)) : recherche de « ${v.nom} »…`);
-    await chercherEtOuvrirIci({ ou: "collection", nom: v.nom, rarete: v.rarete, rareteSouple: false, quand: Date.now() });
-    // La fiche de la carte, avec son bouton « Mettre aux enchères » (clic voulu : c'est la remise en vente demandée).
+    // Un seul onglet s'en charge : la vente est « prise » d'un coup (sous verrou).
+    const prise = await modifierReventes(memo => {
+      const v = memo[cle];
+      if (!v || !(v.etat === "a-revendre" || (v.etat === "revente" && Date.now() - (v.debutRevente || 0) > 2 * MINUTE))) return false;
+      v.etat = "revente";
+      v.debutRevente = Date.now();
+      return true;
+    });
+    if (!prise) return;
+    afficherStatut(`🔁 « ${r.nom} » n'a reçu aucune mise : remise en vente (${nombreLisible(r.depart)}, ${texteDureeVente(r.duree)})…`);
+    await chercherEtOuvrirIci({ ou: "collection", nom: r.nom, rarete: r.rarete, rareteSouple: false, quand: Date.now() });
     const boutonFiche = await attendre(() => [...document.querySelectorAll("button")].find(b => !estDansLePanneau(b) && estVisible(b)
       && /^mettre aux ench[èe]res$/i.test(b.textContent.trim()) && (() => {
         let fiche = b.parentElement;
         while (fiche && !fiche.querySelector("h2")) fiche = fiche.parentElement;
-        return fiche && memeNom(fiche.querySelector("h2").textContent.trim(), v.nom);
+        return fiche && memeNom(fiche.querySelector("h2").textContent.trim(), r.nom);
       })()), 8000);
-    if (!remiseEnVente) return;
-    if (!boutonFiche) return suivante(false, `${v.nom} (introuvable dans ta collection en ${lettreRarete(v.rarete)})`);
-    boutonFiche.click();
+    if (!boutonFiche) return echec(`introuvable dans ta collection en ${lettreRarete(r.rarete)}`);
+    boutonFiche.click(); // clic voulu : c'est la revente que tu as demandée en cochant la case
     const fenetre = await attendre(() => { const f = fenetreMiseEnVente(); return f && f.champ && f.lancer ? f : null; }, 8000);
-    if (!fenetre) return suivante(false, `${v.nom} (la fenêtre « Mettre aux enchères » ne s'est pas ouverte)`);
-    if (fenetre.rarete && fenetre.rarete !== v.rarete) {
-      if (fenetre.annuler) fenetre.annuler.click();
-      return suivante(false, `${v.nom} (la fiche ouverte est en ${lettreRarete(fenetre.rarete)}, pas en ${lettreRarete(v.rarete)})`);
-    }
+    if (!fenetre) return echec("la fenêtre « Mettre aux enchères » ne s'est pas ouverte");
+    const fermer = async raison => { const f = fenetreMiseEnVente(); if (f && f.annuler) f.annuler.click(); return echec(raison); };
+    if (fenetre.rarete !== r.rarete) return fermer(`la fiche ouverte est en ${lettreRarete(fenetre.rarete)}, pas en ${lettreRarete(r.rarete)}`);
     if (fenetre.actives !== null && fenetre.maxActives !== null && fenetre.actives >= fenetre.maxActives) {
-      if (fenetre.annuler) fenetre.annuler.click();
-      return finir(`🔁 Limite du site atteinte (${fenetre.actives}/${fenetre.maxActives} enchères actives) : ${etat.faites} carte(s) remise(s), `
-        + `${etat.file.length} en attente. Relance quand une vente sera finie.`);
+      const f = fenetreMiseEnVente(); if (f && f.annuler) f.annuler.click();
+      await modifierReventes(memo => { if (memo[cle]) { memo[cle].etat = "a-revendre"; memo[cle].note = "limite d'enchères actives atteinte, nouvel essai plus tard"; memo[cle].debutRevente = 0; } });
+      afficherStatut(`🔁 « ${r.nom} » : limite du site atteinte (${fenetre.actives}/${fenetre.maxActives} enchères actives). Nouvel essai dans quelques minutes.`);
+      await pause(5 * MINUTE);
+      return;
     }
-    ecrireDansChamp(fenetre.champ, String(v.depart));
+    ecrireDansChamp(fenetre.champ, String(r.depart));
     fenetre.champ.dispatchEvent(new Event("change", { bubbles: true }));
-    const duree = v.duree || DUREE_VENTE_INCONNUE;
     await pause(300);
-    const boutonDuree = fenetreMiseEnVente() && fenetreMiseEnVente().boutonDuree(duree);
-    if (boutonDuree) boutonDuree.click();
+    const bouton = fenetreMiseEnVente() && fenetreMiseEnVente().boutonDuree(r.duree);
+    if (bouton) bouton.click();
     await pause(400);
-    const verifiee = fenetreMiseEnVente();
-    if (!verifiee || lirePrix(verifiee.champ.value) !== v.depart || verifiee.duree !== duree || !verifiee.lancer || verifiee.lancer.disabled) {
-      if (verifiee && verifiee.annuler) verifiee.annuler.click();
-      return suivante(false, `${v.nom} (mise de départ ou durée impossible à régler)`);
+    caseRevente(); // la case de l'extension, cochée : si elle ne se vend toujours pas, elle repartira
+    const prete = fenetreMiseEnVente();
+    const coche = prete && prete.zone.querySelector(".wmd-case-revente input");
+    if (coche) coche.checked = true;
+    if (!prete || lirePrix(prete.champ.value) !== r.depart || prete.duree !== r.duree || !prete.lancer || prete.lancer.disabled) {
+      return fermer("mise de départ ou durée impossible à régler");
     }
-    if (!remiseEnVente) { if (verifiee.annuler) verifiee.annuler.click(); return; }
-    verifiee.lancer.click();
-    const fermee = await attendre(() => !fenetreMiseEnVente(), 8000);
-    if (!fermee) {
-      const encore = fenetreMiseEnVente();
-      if (encore && encore.annuler) encore.annuler.click();
-      return suivante(false, `${v.nom} (le site n'a pas accepté la mise en vente)`);
-    }
-    await suivante(true);
-    afficherStatut(`🔁 « ${v.nom} » remise aux enchères : ${nombreLisible(v.depart)}, ${texteDureeVente(duree)}.`);
-    await pause(2000 + Math.random() * 1500); // un rythme humain entre deux cartes
+    await modifierReventes(memo => { delete memo[cle]; }); // la nouvelle vente est notée au clic (case cochée)
+    prete.lancer.click();
+    const partie = await attendre(() => !fenetreMiseEnVente(), 8000);
+    if (!partie) return fermer("le site n'a pas accepté la mise en vente");
+    afficherStatut(`🔁 « ${r.nom} » remise aux enchères : ${nombreLisible(r.depart)}, ${texteDureeVente(r.duree)}.`);
+    await pause(2000 + Math.random() * 1500);
   } finally {
     remiseOccupee = false;
+    // Plus rien à revendre : retour à la page d'où l'on venait.
+    const reste = Object.values(reventes).some(v => v.etat === "a-revendre");
+    const { retourRevente } = await api.storage.local.get("retourRevente");
+    if (!reste && retourRevente) {
+      await api.storage.local.remove("retourRevente");
+      if (Date.now() - retourRevente.quand < 10 * MINUTE && retourRevente.adresse !== location.href) location.assign(retourRevente.adresse);
+    }
   }
 }
+
+// 1.17.6 : un petit « 🔁 » sur les cartes à revendre si invendues, dans l'onglet « Mes ventes » du Marché.
+// Une vente pas encore reconnue l'est ici aussi : même carte, même mise de départ, parmi TES ventes affichées.
+function marquerReventes() {
+  if (!REMISE_EN_VENTE) return;
+  const ongletVentes = pageActuelle() === "marche" && /^mes ventes\b/i.test(ongletMarcheOuvert() || "");
+  const liste = Object.entries(reventes);
+  const parId = new Map(liste.filter(([, r]) => r.id).map(([cle, r]) => [r.id, [cle, r]]));
+  const aLier = [];
+  for (const bloc of document.querySelectorAll("[id^='marketplace-auction-']")) {
+    const id = bloc.id.replace("marketplace-auction-", "").toLowerCase();
+    let trouve = ongletVentes ? parId.get(id) : null;
+    if (ongletVentes && !trouve) {
+      const nomElement = bloc.querySelector(CONFIG.selecteurNomCarte);
+      const annonce = lireAnnoncesMarche(true).find(a => a.cle === bloc.id);
+      const enAttente = nomElement && annonce && liste.find(([cle, r]) => r.etat === "attente" && !aLier.some(l => l.cle === cle)
+        && memeNom(r.nom, nomElement.textContent.trim()) && r.depart === annonce.prix && (annonce.rarete === "inconnue" || annonce.rarete === r.rarete));
+      if (enAttente) { aLier.push({ cle: enAttente[0], id: id }); trouve = enAttente; }
+    }
+    const badge = bloc.querySelector(":scope > .wmd-badge-revente");
+    if (!trouve) { if (badge) badge.remove(); continue; }
+    const [, r] = trouve;
+    const titre = `🔁 Revente si invendue : remise aux enchères à ${nombreLisible(r.depart)} pour ${texteDureeVente(r.duree)} si personne ne mise (WikiMasters Doublons). `
+      + "« Annuler et récupérer ma carte » ou ✕ dans le panneau pour l'annuler.";
+    if (badge) { if (badge.title !== titre) badge.title = titre; continue; }
+    const nouveau = creer("span", "🔁", "wmd-badge-revente");
+    nouveau.title = titre;
+    if (getComputedStyle(bloc).position === "static") bloc.style.position = "relative";
+    bloc.appendChild(nouveau);
+  }
+  if (aLier.length) {
+    modifierReventes(memo => {
+      for (const { cle, id } of aLier) {
+        const r = memo[cle];
+        if (r && r.etat === "attente" && !Object.values(memo).some(autre => autre.id === id)) {
+          r.id = id; r.fin = r.fin || r.quand + r.duree * MINUTE; r.etat = "suivie";
+        }
+      }
+    }).catch(() => {});
+  }
+}
+
+// Le panneau : les ventes à revendre si invendues, avec ✕ pour en annuler une.
+function afficherReventes() {
+  const bloc = document.getElementById("wmd-reventes");
+  if (!bloc) return;
+  const liste = Object.entries(reventes).sort((a, b) => (a[1].fin || a[1].quand) - (b[1].fin || b[1].quand));
+  const signature = JSON.stringify(liste.map(([cle, r]) => [cle, r.etat, r.fin, r.note]));
+  bloc.hidden = !REMISE_EN_VENTE || !liste.length;
+  if (bloc.dataset.signature === signature) return;
+  bloc.dataset.signature = signature;
+  bloc.replaceChildren(creer("div", `🔁 Revente si invendue (${liste.length})`, "wmd-groupe-titre"));
+  for (const [cle, r] of liste) {
+    const ligne = creer("div", undefined, "wmd-ligne-revente");
+    const etat = r.etat === "attente" ? "vente pas encore reconnue" : r.etat === "suivie" ? (r.fin ? `fin ${new Date(r.fin).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "en cours")
+      : r.etat === "a-revendre" ? "invendue : remise en vente…" : "remise en vente en cours";
+    ligne.append(creer("span", `${lettreRarete(r.rarete)} ${r.nom} · ${nombreLisible(r.depart)} · ${texteDureeVente(r.duree)} · ${etat}${r.note ? " (" + r.note + ")" : ""}`));
+    const retirer = creer("button", "✕", "wmd-retirer-revente");
+    retirer.type = "button";
+    retirer.title = "Ne pas la remettre en vente";
+    retirer.addEventListener("click", () => modifierReventes(memo => { delete memo[cle]; }));
+    ligne.appendChild(retirer);
+    bloc.appendChild(ligne);
+  }
+}
+
+// ---------------------------------------------------------------------
+//  1.20 : « ⭐ MES SOUHAITS » SUR LE MARCHÉ
+//  Un sous-menu repliable du panneau, sur le Marché : ta liste de souhaits, et un clic sur une carte la
+//  cherche au Marché (dans sa rareté). La liste est gardée quand l'extension la lit : « Chercher mes
+//  souhaits chez mes amis », le bouton « 🔄 Relire ma liste », ou en passant sur « Toutes les cartes »
+//  avec le filtre « Liste de souhaits » du site.
+// ---------------------------------------------------------------------
+let mesSouhaitsConnus = null;
+api.storage.local.get(["mesSouhaits", "souhaitsChezAmis"]).then(({ mesSouhaits, souhaitsChezAmis }) => {
+  mesSouhaitsConnus = mesSouhaits || (souhaitsChezAmis && Array.isArray(souhaitsChezAmis.souhaits)
+    ? { liste: souhaitsChezAmis.souhaits, le: souhaitsChezAmis.date } : null);
+  afficherSouhaitsMarche();
+}).catch(() => {});
+api.storage.onChanged.addListener(changements => {
+  if (changements.mesSouhaits) { mesSouhaitsConnus = changements.mesSouhaits.newValue || null; afficherSouhaitsMarche(true); }
+});
+
+// En passant sur « Toutes les cartes », filtre « Liste de souhaits » actif : la liste affichée est gardée.
+function releverSouhaitsAffiches() {
+  if (pageActuelle() !== "toutes-les-cartes" || enCours || chasseEnCours) return;
+  const filtre = boutonExact(SOUHAITS.texteFiltre);
+  if (!filtre || !filtre.classList.contains(CONFIG.classeFiltreChoisi)) return;
+  const cartes = cartesDans(document.querySelector("main") || document.body).map(c => ({ nom: c.nom, rarete: c.rarete }));
+  if (!cartes.length) return;
+  const page = lirePagination();
+  const ancienne = (mesSouhaitsConnus && mesSouhaitsConnus.liste) || [];
+  // Une seule page : c'est toute la liste. Plusieurs pages : on ajoute ce qui manque.
+  const liste = !page || page.total <= 1 ? cartes
+    : [...ancienne, ...cartes.filter(c => !ancienne.some(a => a.nom === c.nom && a.rarete === c.rarete))];
+  const avant = JSON.stringify(ancienne.map(c => c.nom + c.rarete).sort());
+  if (JSON.stringify(liste.map(c => c.nom + c.rarete).sort()) === avant) return;
+  api.storage.local.set({ mesSouhaits: { liste: liste, le: Date.now() } }).catch(() => {});
+}
+
+function relireMesSouhaits() {
+  api.storage.local.set({ chasse: { etape: "souhaits", seulementListe: true, retour: location.href, quand: Date.now() } })
+    .then(() => { location.href = SOUHAITS.pageToutes; }).catch(() => {});
+}
+
+let signatureSouhaitsMarche = "";
+function afficherSouhaitsMarche(forcer = false) {
+  const bloc = document.getElementById("wmd-souhaits-marche");
+  if (!bloc) return;
+  const visible = pageActuelle() === "marche";
+  if (bloc.hidden === visible) bloc.hidden = !visible;
+  if (!visible) return;
+  const liste = (mesSouhaitsConnus && mesSouhaitsConnus.liste) || [];
+  const signature = JSON.stringify([liste, mesSouhaitsConnus && mesSouhaitsConnus.le]);
+  if (!forcer && signature === signatureSouhaitsMarche && bloc.querySelector(".wmd-liste-souhaits")) return;
+  signatureSouhaitsMarche = signature;
+  const titre = bloc.querySelector("summary");
+  titre.textContent = `⭐ Mes souhaits (${liste.length})`;
+  for (const enfant of [...bloc.children]) if (enfant !== titre) enfant.remove();
+  const zone = creer("div", undefined, "wmd-liste-souhaits");
+  if (!liste.length) zone.appendChild(creer("div", "Ta liste n'a pas encore été lue : clique sur « 🔄 Relire ma liste ».", "wmd-discret"));
+  const tries = [...liste].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  for (const carte of tries) {
+    const lettre = carte.rarete && RARETES[carte.rarete] ? lettreRarete(carte.rarete) : "";
+    const bouton = creer("button", `${carte.nom}${lettre ? ` (${lettre})` : ""}`, "wmd-souhait-ligne");
+    bouton.type = "button";
+    bouton.title = `Chercher « ${carte.nom} »${lettre ? ` en ${RARETES[carte.rarete].nom}` : ""} au Marché`;
+    bouton.addEventListener("click", () => rechercherAuMarcheIci({ nom: carte.nom, rarete: RARETES[carte.rarete] ? carte.rarete : null, quand: Date.now() }));
+    zone.appendChild(bouton);
+  }
+  bloc.appendChild(zone);
+  const relire = creer("button", "🔄 Relire ma liste");
+  relire.type = "button";
+  relire.title = "Va sur « Toutes les cartes », lit ta liste de souhaits (filtre du site), puis revient ici";
+  relire.addEventListener("click", relireMesSouhaits);
+  bloc.appendChild(relire);
+  if (mesSouhaitsConnus && mesSouhaitsConnus.le) bloc.appendChild(creer("div", `Liste lue le ${dateLisible(mesSouhaitsConnus.le)}.`, "wmd-discret"));
+}
+
+// ---------------------------------------------------------------------
+//  1.20 : LES ÉCHANGES (page « Échanges » du site, /trades)
+//  Sur chaque offre : le prix de chaque carte (prix moyen du site, sinon ≈ prix vu au Marché, « ? » si le
+//  site n'en a pas), le total de chaque côté (à côté de « Vous offrez » et de « … offre »), et un cadre :
+//  - vert : une carte de ta liste de souhaits que l'on t'offre ;
+//  - jaune : une carte que l'on t'offre et que tu n'as pas encore ;
+//  - rouge : une carte que tu offres et dont c'est ton dernier exemplaire.
+//  Un clic sur une carte de l'offre ouvre un petit menu : relever son prix moyen tout de suite
+//  (comme l'onglet « Marché » de sa fiche), ou la voir au Marché.
+//  Ta collection est corrigée quand un échange est accepté (par toi : bouton « Accepter » ; par ton ami :
+//  une offre envoyée, vue « En attente », puis acceptée dans l'onglet « Historique »).
+// ---------------------------------------------------------------------
+const cartesEchangeConnues = new Map(); // « nom|rareté » (et « nom ») → identifiant de la carte
+const demandesHistorique = new Map();   // identifiant de la carte → rareté demandée (pour le « ? »)
+function retenirCartesEchange(cartes) {
+  for (const c of cartes || []) {
+    if (!c || !c.carteId || !c.nom) continue;
+    nomsDesCartes.set(c.carteId, c.nom);
+    const rarete = rareteDuSite(c.rarete);
+    if (rarete) cartesEchangeConnues.set(`${c.nom}|${rarete}`, c.carteId);
+    if (!cartesEchangeConnues.has(c.nom)) cartesEchangeConnues.set(c.nom, c.carteId);
+  }
+  versionPage++;
+}
+
+// Les offres affichées : [{ zone, pseudo, envoyee, statut, date, cotes: [{ etiquette, moi, cartes: [{ element, nom, rarete }] }] }]
+function lireOffresEchange() {
+  if (!location.pathname.startsWith("/trades")) return [];
+  const offres = [];
+  // 1.20.2 : la fenêtre « Détail de l'échange » est lue comme une offre (ses grandes cartes, le total…).
+  const details = [...document.querySelectorAll(".sheet-overlay, [role='dialog']")].filter(f => {
+    const h2 = f.querySelector("h2");
+    return h2 && /^d[ée]tail de l.[ée]change/i.test(h2.textContent.trim());
+  });
+  for (const zone of [...document.querySelectorAll("main .card-frame"), ...details]) {
+    if (estDeLExtension(zone)) continue;
+    const detail = details.includes(zone);
+    const etiquettes = [...zone.querySelectorAll("p")].filter(p => /^vous offrez$/i.test(p.textContent.trim())
+      || /\boffre$/i.test(p.textContent.trim()) || /^en [ée]change de$/i.test(p.textContent.trim()));
+    if (!etiquettes.length) continue;
+    // 1.20.2 : « En échange de » (offre reçue : « Jesuif offre » / « En échange de ») = ce que TU donnes,
+    // sauf si l'autre côté est « Vous offrez ». Avant, ce côté était oublié (ni prix, ni total, ni collection).
+    const vousOffrez = etiquettes.some(e => /^vous offrez$/i.test(e.textContent.trim()));
+    const cotes = etiquettes.map(etiquette => {
+      const texte = etiquette.textContent.trim();
+      const moi = /^vous offrez$/i.test(texte) || (/^en [ée]change de$/i.test(texte) && !vousOffrez);
+      const liste = etiquette.nextElementSibling;
+      const cartes = [];
+      if (liste && detail) {
+        // Les grandes cartes : un cadre arrondi avec un seul titre h3 (le nom).
+        for (const cadre of liste.querySelectorAll(".rounded-2xl")) {
+          const titres = cadre.querySelectorAll("h3");
+          if (titres.length !== 1 || cadre.parentElement.closest(".wmd-echange-carte")) continue;
+          if (!cadre.dataset.wmdNom) cadre.dataset.wmdNom = titres[0].textContent.trim();
+          const rarete = rareteDuCadre(cadre);
+          if (cadre.dataset.wmdNom && RARETES[rarete]) cartes.push({ element: cadre, nom: cadre.dataset.wmdNom, rarete, grande: true });
+        }
+      } else if (liste) {
+        for (const puce of liste.querySelectorAll("span[title]")) {
+          const lettre = (puce.textContent.match(/^\s*([A-Z]{1,3}\+?)\s*·/) || [])[1];
+          const rarete = lettre ? rareteDepuisLettre(lettre) : null;
+          // Le nom complet est dans l'infobulle du site ; gardé à part, car l'extension remplace cette infobulle.
+          if (!puce.dataset.wmdNom) puce.dataset.wmdNom = (puce.getAttribute("title") || "").trim();
+          const nom = puce.dataset.wmdNom;
+          if (nom && rarete) cartes.push({ element: puce, nom, rarete });
+        }
+      }
+      return { etiquette, moi, cartes };
+    });
+    const textes = [...zone.querySelectorAll("span")].filter(e => !e.children.length).map(e => e.textContent.trim());
+    const entete = detail ? "" : textes.find(t => /^(à|de)\s+\S/i.test(t)) || "";
+    const lienAmi = detail ? zone.querySelector("a[href*='/profile/']") : null;
+    offres.push({
+      zone, cotes, detail,
+      pseudo: lienAmi ? lienAmi.textContent.trim() : entete.replace(/^(à|de)\s+/i, ""),
+      envoyee: !detail && /^à\s/i.test(entete),
+      statut: detail ? "" : (textes.find(t => /^·\s*\S/.test(t)) || "").replace(/^·\s*/, ""),
+      date: detail ? "" : textes.find(t => /^\d{1,2}\s+\S+\.?$/.test(t) || /^\d{1,2}\/\d{1,2}/.test(t)) || ""
+    });
+  }
+  return offres;
+}
+function signatureOffre(offre) {
+  const cote = moi => offre.cotes.filter(c => c.moi === moi).flatMap(c => c.cartes.map(x => `${x.nom}|${x.rarete}`)).sort().join(",");
+  return `${offre.pseudo}#${offre.date}#${cote(true)}#${cote(false)}`;
+}
+function changementsOffre(offre, raison) {
+  return offre.cotes.flatMap(c => c.cartes.map(x => ({ nom: x.nom, rarete: x.rarete, delta: c.moi ? -1 : 1, raison, quand: Date.now() })));
+}
+
+// Le prix d'une carte pour l'échange : { texte, valeur, details }.
+function prixPourEchange(nom, rarete) {
+  const prix = prixEnCache ? prixEnCache.get(`${nom}|${rarete}`) : null;
+  if (prix && prix.moyenne) {
+    return { texte: nombreLisible(prix.estimation), valeur: prix.estimation,
+      details: `Prix moyen du site : ${nombreLisible(prix.estimation)} (mis à jour le ${prix.moyenneLe ? new Date(prix.moyenneLe).toLocaleDateString("fr-FR") : "?"})` };
+  }
+  const verifieLe = dateSansMoyenne(nom, rarete);
+  if (prix && prix.estimation > 0) {
+    return { texte: "≈" + nombreLisible(prix.estimation), valeur: prix.estimation,
+      details: `Pas de prix moyen du site${verifieLe ? ` (vérifié le ${verifieLe})` : ""} · ${texteEstimation(prix)} d'après le Marché` };
+  }
+  if (verifieLe) return { texte: "?", valeur: null, details: `Pas de prix moyen sur le site (vérifié le ${verifieLe})` };
+  return { texte: "—", valeur: null, details: "Prix inconnu de l'extension : clique sur la carte pour le relever." };
+}
+
+let echangesEnCours = false;
+async function marquerEchanges() {
+  if (echangesEnCours || !location.pathname.startsWith("/trades")) return;
+  echangesEnCours = true;
+  try {
+    const offres = lireOffresEchange();
+    if (!offres.length) return;
+    if (!prixEnCache) prixEnCache = await prixParCarte();
+    const { collection, mesSouhaits } = await api.storage.local.get(["collection", "mesSouhaits"]);
+    const possedees = new Map((collection ? collection.cartes : []).map(([nom, , quantite]) => [normaliser(nom), quantite]));
+    const souhaits = new Set(((mesSouhaits && mesSouhaits.liste) || []).map(c => normaliser(c.nom)));
+    for (const offre of offres) {
+      for (const cote of offre.cotes) {
+        let total = 0, inconnues = 0;
+        for (const carte of cote.cartes) {
+          const prix = prixPourEchange(carte.nom, carte.rarete);
+          if (prix.valeur > 0) total += prix.valeur; else inconnues++;
+          const e = carte.element;
+          e.classList.add("wmd-echange-carte");
+          e.classList.toggle("wmd-echange-grande", !!carte.grande);
+          if (e.dataset.wmdPrix !== prix.texte) e.dataset.wmdPrix = prix.texte;
+          const quantite = possedees.get(normaliser(carte.nom)) || 0;
+          const souhait = !cote.moi && souhaits.has(normaliser(carte.nom));
+          const nouvelle = !cote.moi && !souhait && collection && quantite === 0;
+          const derniere = cote.moi && collection && quantite === 1;
+          e.classList.toggle("wmd-echange-souhait", souhait);
+          e.classList.toggle("wmd-echange-nouvelle", nouvelle);
+          e.classList.toggle("wmd-echange-derniere", derniere);
+          const titre = `${carte.nom} (${lettreRarete(carte.rarete)}) · ${prix.details}`
+            + (souhait ? " · ⭐ dans ta liste de souhaits" : nouvelle ? " · tu ne l'as pas encore" : derniere ? " · ton dernier exemplaire" : "")
+            + (collection && !souhait && !nouvelle && !derniere ? ` · tu en as ${quantite}` : "")
+            + " · clic : prix moyen, Marché, amis (WikiMasters Doublons)";
+          if (e.title !== titre) e.title = titre;
+        }
+        const texteTotal = !cote.cartes.length ? null : total === 0 ? `? (${inconnues} sans prix)`
+          : nombreLisible(total) + (inconnues ? ` (+${inconnues} sans prix)` : "");
+        if (texteTotal === null) delete cote.etiquette.dataset.wmdTotal;
+        else if (cote.etiquette.dataset.wmdTotal !== texteTotal) cote.etiquette.dataset.wmdTotal = texteTotal;
+      }
+    }
+    await suivreEchangesEnvoyes(offres);
+  } finally {
+    echangesEnCours = false;
+  }
+}
+
+// Tes offres envoyées « En attente » sont notées ; vues plus tard « Acceptée » : la collection est corrigée.
+async function suivreEchangesEnvoyes(offres) {
+  const envoyees = offres.filter(o => o.envoyee && o.pseudo);
+  if (!envoyees.length) return;
+  const { echangesEnvoyes = {} } = await api.storage.local.get("echangesEnvoyes");
+  let modifie = false;
+  for (const offre of envoyees) {
+    const signature = signatureOffre(offre);
+    if (/attente/i.test(offre.statut) && !echangesEnvoyes[signature]) { echangesEnvoyes[signature] = Date.now(); modifie = true; }
+    if (/accept/i.test(offre.statut) && echangesEnvoyes[signature]) {
+      delete echangesEnvoyes[signature];
+      modifie = true;
+      await ajusterCollection(changementsOffre(offre, `échange avec ${offre.pseudo} accepté`));
+    }
+    if (/refus|annul|expir/i.test(offre.statut) && echangesEnvoyes[signature]) { delete echangesEnvoyes[signature]; modifie = true; }
+  }
+  for (const [signature, quand] of Object.entries(echangesEnvoyes)) if (Date.now() - quand > 30 * JOUR) { delete echangesEnvoyes[signature]; modifie = true; }
+  if (modifie) await api.storage.local.set({ echangesEnvoyes });
+}
+
+// « Accepter » une offre reçue : la collection est corrigée quand l'offre quitte la liste (le site a accepté).
+document.addEventListener("click", evenement => {
+  const bouton = evenement.target instanceof Element ? evenement.target.closest("button") : null;
+  if (!bouton || estDeLExtension(bouton) || !location.pathname.startsWith("/trades") || !/^accepter/i.test(bouton.textContent.trim())) return;
+  const offre = lireOffresEchange().find(o => o.zone.contains(bouton));
+  if (!offre) return;
+  const changements = changementsOffre(offre, `échange avec ${offre.pseudo || "un ami"} accepté`);
+  attendre(() => !document.body.contains(bouton) || !estVisible(bouton), 10 * SECONDE).then(fait => {
+    if (fait) return ajusterCollection(changements);
+  }).catch(() => {});
+}, true);
+
+// Le clic sur une carte d'une offre : le petit menu (au lieu d'ouvrir le détail de l'échange).
+let clicFicheEchange = false;
+function fermerMenuEchange() {
+  const menu = document.getElementById("wmd-menu-echange");
+  if (menu) menu.remove();
+}
+document.addEventListener("click", evenement => {
+  const cible = evenement.target instanceof Element ? evenement.target : null;
+  if (cible && !cible.closest("#wmd-menu-echange")) fermerMenuEchange();
+  const puce = cible ? cible.closest(".wmd-echange-carte") : null;
+  if (!puce || clicFicheEchange) return; // 1.20.2 : « 🃏 Ouvrir sa fiche » laisse passer ce clic au site
+  const offre = lireOffresEchange().find(o => o.zone.contains(puce));
+  const carte = offre && offre.cotes.flatMap(c => c.cartes).find(c => c.element === puce);
+  if (!carte) return;
+  evenement.preventDefault();
+  evenement.stopPropagation();
+  ouvrirMenuEchange(carte, evenement.clientX, evenement.clientY);
+}, true);
+function ouvrirMenuEchange(carte, x, y) {
+  fermerMenuEchange();
+  const menu = creer("div", undefined, "wmd-menu-echange");
+  menu.id = "wmd-menu-echange";
+  menu.appendChild(creer("b", `${carte.nom} (${lettreRarete(carte.rarete)})`));
+  const prix = prixPourEchange(carte.nom, carte.rarete);
+  const ligne = creer("div", prix.details);
+  menu.appendChild(ligne);
+  const carteId = cartesEchangeConnues.get(`${carte.nom}|${carte.rarete}`) || cartesEchangeConnues.get(carte.nom);
+  const relever = creer("button", "📈 Relever son prix moyen maintenant");
+  relever.type = "button";
+  if (!carteId) {
+    relever.disabled = true;
+    relever.title = "L'identifiant de la carte n'a pas été vu sur cette page : recharge la page (F5), ou ouvre sa fiche, onglet « Marché ».";
+  }
+  relever.addEventListener("click", async () => {
+    demandesHistorique.set(carteId, carte.rarete);
+    nomsDesCartes.set(carteId, carte.nom);
+    window.postMessage({ source: "wmd-demande", version: 1, type: "lire-historique", id: carteId }, location.origin);
+    ligne.textContent = "Lecture de l'historique des prix sur le site…";
+    const debut = Date.now();
+    const lu = await attendre(() => historiqueEnregistre && memeNom(historiqueEnregistre.nom, carte.nom) && historiqueEnregistre.quand >= debut, 8 * SECONDE);
+    if (lu) await attendre(() => false, 600); // le temps que la mémoire soit relue
+    prixEnCache = await prixParCarte();
+    ligne.textContent = lu ? prixPourEchange(carte.nom, carte.rarete).details : "Pas de réponse du site : réessaie dans un instant.";
+    versionPage++;
+  });
+  menu.appendChild(relever);
+  menu.appendChild(blocVoirAuMarche(carte.nom, carte.rarete));
+  // 1.20.2 : chercher la carte chez tes amis, et ouvrir sa fiche du site (comme sans l'extension).
+  const amis = creer("button", `👥 Vérifier si un de mes amis la possède (${lettreRarete(carte.rarete)})`);
+  amis.type = "button";
+  amis.title = "Va sur la page Amis et cherche cette carte (même rareté) chez chacun de tes amis. À utiliser avec modération.";
+  amis.addEventListener("click", () => { fermerMenuEchange(); verifierChezAmis(carte.nom, carte.rarete); });
+  menu.appendChild(amis);
+  const ficheSite = creer("button", carte.grande ? "🃏 Ouvrir sa fiche" : "🔎 Ouvrir le détail de l'échange");
+  ficheSite.type = "button";
+  ficheSite.addEventListener("click", () => {
+    fermerMenuEchange();
+    derniereCarteCliquee = { nom: carte.nom, rarete: carte.rarete };
+    clicFicheEchange = true;
+    try { carte.element.click(); } finally { clicFicheEchange = false; }
+  });
+  menu.appendChild(ficheSite);
+  document.body.appendChild(menu);
+  const largeur = menu.offsetWidth, hauteur = menu.offsetHeight;
+  menu.style.left = Math.max(8, Math.min(x + 8, window.innerWidth - largeur - 8)) + "px";
+  menu.style.top = Math.max(8, Math.min(y + 8, window.innerHeight - hauteur - 8)) + "px";
+}
+
+// ---------------------------------------------------------------------
+//  1.19 : TA COLLECTION SUIVIE ENTRE DEUX LECTURES
+//  La collection en mémoire (dernière lecture complète) est corrigée toute seule quand tu :
+//  - mets une carte aux enchères (« Lancer l'enchère » accepté par le site) : −1 ;
+//  - défausses une carte (« Défausser » sur sa fiche) : −1 ;
+//  - remportes une enchère : +1 ;
+//  - récupères une carte de tes ventes (vente annulée, ou finie sans mise) : +1.
+//  Ce qui s'est passé AVANT la dernière lecture n'est jamais recompté (la lecture l'a déjà vu),
+//  et une même enchère ne compte qu'une fois (mémoire « collectionSuivie »).
+// ---------------------------------------------------------------------
+function modifierCollection(tache) {
+  return navigator.locks.request("wmd-collection", async () => {
+    const { collection, collectionSuivie = {} } = await api.storage.local.get(["collection", "collectionSuivie"]);
+    if (!collection || !Array.isArray(collection.cartes)) return null; // pas encore de lecture : rien à corriger
+    const resultat = await tache(collection, collectionSuivie);
+    if (!resultat) return resultat;
+    // Ménage : une enchère comptée il y a plus de 60 jours est oubliée.
+    for (const [id, quand] of Object.entries(collectionSuivie)) if (Date.now() - quand > 60 * JOUR) delete collectionSuivie[id];
+    await api.storage.local.set({ collection: collection, collectionSuivie: collectionSuivie });
+    derniereCollection = []; // la prochaine estimation relira la collection corrigée
+    return resultat;
+  });
+}
+// +1 ou −1 exemplaire de « nom » (dans cette rareté si possible), sur la collection en mémoire.
+function changerQuantite(collection, nom, rarete, delta) {
+  const ligne = collection.cartes.find(([n, r]) => n === nom && r === rarete) || collection.cartes.find(([n]) => memeNom(n, nom));
+  if (delta > 0) {
+    if (ligne) ligne[2] += delta;
+    else collection.cartes.push([nom, rarete, delta, 0]);
+    return true;
+  }
+  if (!ligne) return false; // pas dans la collection en mémoire : rien à enlever
+  ligne[2] += delta;
+  if (ligne[2] <= 0) collection.cartes.splice(collection.cartes.indexOf(ligne), 1);
+  return true;
+}
+function texteChangementCollection(changements) {
+  if (!changements.length) return "";
+  const details = changements.slice(0, 3).map(c => `${c.nom} (${lettreRarete(c.rarete)}) ${c.delta > 0 ? "+1" : "−1"}, ${c.raison}`);
+  return `📚 Collection mise à jour : ${details.join(" ; ")}${changements.length > 3 ? ` (et ${changements.length - 3} de plus)` : ""}.`;
+}
+async function ajusterCollection(changements) {
+  if (!reglages.suiviCollection) return null; // 1.19 : réglable (Réglages, « Fonctions »)
+  const faits = await modifierCollection((collection, suivie) => {
+    const appliques = [];
+    for (const c of changements) {
+      if (!c.nom || !c.rarete || !RARETES[c.rarete]) continue;
+      if (c.quand && c.quand < collection.date) continue;  // déjà vu par la dernière lecture
+      if (c.id && suivie[c.id]) continue;                   // cette enchère a déjà compté
+      if (!changerQuantite(collection, c.nom, c.rarete, c.delta)) continue;
+      if (c.id) suivie[c.id] = Date.now();
+      appliques.push(c);
+    }
+    return appliques.length ? appliques : false;
+  }).catch(() => null);
+  if (faits && faits.length) afficherStatut(texteChangementCollection(faits), GARDER_5S);
+  return faits;
+}
+
+// Les enchères vues sur le site (réponses du Marché) : tes victoires et tes cartes revenues.
+async function suivreCollectionDuSite(encheres) {
+  if (!monId) return;
+  const changements = [];
+  for (const e of encheres) {
+    if (!e || !e.statut || e.statut === "active") continue;
+    const rarete = rareteDuSite(e.rarete);
+    const quand = e.regle || e.fin;
+    if (!e.nom || !rarete || !quand) continue;
+    if (e.gagnantId === monId) {
+      changements.push({ id: e.id, nom: e.nom, rarete, delta: 1, raison: "enchère remportée", quand });
+    } else if (e.vendeurId === monId && !e.gagnantId && !(e.prixFinal > 0) && !(e.mise > 0)) {
+      const annulee = /cancel|annul/i.test(e.statut);
+      changements.push({ id: e.id, nom: e.nom, rarete, delta: 1, raison: annulee ? "vente annulée, carte récupérée" : "pas vendue, carte revenue", quand });
+    }
+  }
+  if (changements.length) await ajusterCollection(changements);
+}
+
+// « Lancer l'enchère » : la carte quitte ta collection quand la fenêtre se ferme (le site a accepté).
+document.addEventListener("click", evenement => {
+  const bouton = evenement.target instanceof Element ? evenement.target.closest("button") : null;
+  if (!bouton || !/^lancer l'ench[èe]re$/i.test(bouton.textContent.trim())) return;
+  const fenetre = fenetreMiseEnVente();
+  if (!fenetre || !fenetre.nom || !fenetre.rarete) return;
+  const { nom, rarete } = fenetre;
+  const quand = Date.now();
+  attendre(() => !fenetreMiseEnVente(), 10 * SECONDE).then(partie => {
+    if (partie) return ajusterCollection([{ nom, rarete, delta: -1, raison: "mise aux enchères", quand }]);
+  }).catch(() => {});
+}, true);
+
+// « Annuler et récupérer ma carte » : la carte revient (l'enchère est notée, le site ne la recomptera pas).
+document.addEventListener("click", evenement => {
+  const bouton = evenement.target instanceof Element ? evenement.target.closest("button") : null;
+  if (!bouton || !/annuler et r[ée]cup[ée]rer ma carte/i.test(bouton.textContent)) return;
+  const page = location.pathname.match(REGEX_PAGE_ENCHERE);
+  const e = page && encheresDuSite.get(page[1].toLowerCase());
+  if (!e || !e.nom || !rareteDuSite(e.rarete) || (monId && e.vendeurId && e.vendeurId !== monId)) return;
+  const quand = Date.now();
+  // Le bouton disparaît quand le site a accepté l'annulation.
+  attendre(() => !document.body.contains(bouton) || !estVisible(bouton), 10 * SECONDE).then(fait => {
+    if (fait) return ajusterCollection([{ id: e.id, nom: e.nom, rarete: rareteDuSite(e.rarete), delta: 1, raison: "vente annulée, carte récupérée", quand }]);
+  }).catch(() => {});
+}, true);
+
+// « Défausser » sur la fiche d'une carte. Si le site demande de confirmer, c'est la confirmation qui compte.
+let defausseEnAttente = null;
+document.addEventListener("click", evenement => {
+  const bouton = evenement.target instanceof Element ? evenement.target.closest("button") : null;
+  if (!bouton || estDeLExtension(bouton)) return;
+  const texte = bouton.textContent.trim();
+  const dansConfirmation = bouton.closest('[role="dialog"], [role="alertdialog"]');
+  if (defausseEnAttente && Date.now() - defausseEnAttente.quand < MINUTE && /^(d[ée]fausser|confirmer|oui)/i.test(texte)
+    && dansConfirmation && !dansConfirmation.contains(defausseEnAttente.bouton)) {
+    const { nom, rarete, quand } = defausseEnAttente;
+    defausseEnAttente = null;
+    ajusterCollection([{ nom, rarete, delta: -1, raison: "défaussée", quand }]);
+    return;
+  }
+  if (!/^d[ée]fausser/i.test(texte)) return;
+  const lue = lireFicheCarte(bouton);
+  if (!lue) return;
+  const attente = defausseEnAttente = { nom: lue.nom, rarete: lue.rarete, quand: Date.now(), bouton: bouton };
+  setTimeout(() => {
+    if (defausseEnAttente !== attente) return;
+    // Une fenêtre de confirmation s'est ouverte : on attend son bouton.
+    const confirmation = [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].find(f => !f.contains(bouton) && estVisible(f)
+      && [...f.querySelectorAll("button")].some(b => /^(d[ée]fausser|confirmer|oui)/i.test(b.textContent.trim())));
+    if (confirmation) return;
+    defausseEnAttente = null;
+    ajusterCollection([{ nom: attente.nom, rarete: attente.rarete, delta: -1, raison: "défaussée", quand: attente.quand }]);
+  }, 1500);
+}, true);
 
 async function recevoirReponseSite(donnees) {
   const maintenant = Date.now();
@@ -7138,17 +8073,18 @@ async function recevoirReponseSite(donnees) {
   }
   if (donnees.id && Array.isArray(donnees.mises)) misesDuSite.set(donnees.id, { mises: donnees.mises, vuLe: maintenant });
   versionPage++; // les boucles « si la page a changé » repassent (fenêtre des amis, enchères suivies…)
-  if (!donnees.id && donnees.methode === "GET" && Array.isArray(donnees.encheres)) {
+  if (!donnees.id && donnees.methode === "GET" && Array.isArray(donnees.encheres) && !donnees.demandeExtension) {
     triDuSite = donnees.tri || null;
     encoreDuSite = typeof donnees.encore === "boolean" ? donnees.encore : null;
   }
 
   await apprendreIdentite(miennes);
-  await noterMesVentes([...toutes.values()]); // 1.17.3 : les ventes invendues, à remettre en vente
+  await suivreReventes([...toutes.values()]); // 1.17.5 : les ventes à revendre si invendues
   // La page d'une enchère où tu mènes donne aussi ton pseudo.
   if (monId && donnees.enchere && donnees.enchere.meneurId === monId && donnees.enchere.meneur) await noterPseudo(donnees.enchere.meneur);
 
   await noterAchatsDuSite([...toutes.values()]);
+  await suivreCollectionDuSite([...toutes.values()]); // 1.19 : ta collection corrigée (victoires, cartes revenues)
   if (!reglages.encheres) return;
 
   // Tes mises en cours : suivies toutes seules (sauf « Ne plus suivre »), comme avec l'onglet « Mes enchères ».
@@ -7363,17 +8299,9 @@ function suggestionsPour(carte, posees) {
 // Sur la grille de ta Collection : un badge sur chaque carte reconnue (« 🏷️ 🎭 comédiens », ou « ✓ » si c'est fait).
 // 1.9 : le badge est un petit élément à lui (et non plus le « ::before » de la carte, déjà pris par le badge « $ »).
 function badgeEtiquettes(cadre, texte, aFaire) {
-  let badge = cadre.querySelector(":scope > .wmd-badge-etiquettes");
-  if (!texte) {
-    if (badge) badge.remove();
-    return;
-  }
-  if (!badge) {
-    badge = creer("span", undefined, "wmd-badge-etiquettes");
-    cadre.appendChild(badge);
-  }
+  const badge = badgeDansPile(cadre, "wmd-badge-etiquettes", texte || null); // 1.20 : dans la colonne des repères
+  if (!badge) return;
   badge.classList.toggle("wmd-a-etiqueter", aFaire);
-  if (badge.dataset.texte !== texte) badge.dataset.texte = texte;
   if (badge.title !== texte) badge.title = texte;
 }
 
@@ -7598,7 +8526,7 @@ function changementDuSite(mutation) {
   const cible = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
   if (!cible) return true;
   if (mutation.type === "characterData" && REGEX_MINUTEUR.test(mutation.target.nodeValue || "")) return false;
-  if (cible.closest("#wmd-panneau, .wmd-prix-fiche, #wmd-suivi-enchere, #wmd-amis-fiche, .wmd-badge-achat, .wmd-badge-marche, .wmd-badge-etiquettes, #wmd-alerte-amis, #wmd-aide-prixmax")) return false;
+  if (cible.closest("#wmd-panneau, .wmd-prix-fiche, #wmd-suivi-enchere, #wmd-amis-fiche, .wmd-badge-achat, .wmd-badge-marche, .wmd-badge-etiquettes, .wmd-pile, #wmd-alerte-amis, #wmd-aide-prixmax")) return false;
   if (mutation.type === "attributes") {
     const nom = mutation.attributeName || "";
     if (nom.startsWith("data-wmd") || nom === "title" || nom === "style") return false;
@@ -7684,40 +8612,6 @@ boucle(() => {
   actualiserPanneau();
 }, 2000);
 
-// 1.17.5 : LES PRIX DU MARCHÉ OFFERTS AVEC L'EXTENSION (fichier « prix-marche-wikimasters.csv »).
-// Une fois par version de l'extension (à l'installation, puis après chaque mise à jour), le fichier
-// livré avec elle est ajouté aux prix, exactement comme avec « 📥 Importer un fichier CSV » : seulement
-// ce qui manque, ou ce qui est daté d'un jour plus récent. Tes propres relevés ne sont jamais écrasés
-// par un prix plus ancien. Un seul onglet s'en charge. Rien n'est envoyé ni demandé au site.
-const PRIX_OFFERTS_VERROU_MS = 2 * 60 * 1000;
-async function chargerPrixOfferts() {
-  const version = api.runtime.getManifest().version;
-  const lu = await api.storage.local.get(["prixOffertsCharges", "prixOffertsEnCours"]);
-  if (lu.prixOffertsCharges === version) return;
-  if (lu.prixOffertsEnCours && Date.now() - lu.prixOffertsEnCours < PRIX_OFFERTS_VERROU_MS) return; // un autre onglet s'en occupe
-  await api.storage.local.set({ prixOffertsEnCours: Date.now() });
-  try {
-    const reponse = await api.runtime.sendMessage({ type: "prix-offerts-lire" });
-    if (!reponse || reponse.erreur || !reponse.texte) {
-      console.log("[WikiMasters Doublons] Prix offerts non chargés :", reponse ? reponse.erreur : "pas de réponse");
-      return; // réessayé à la prochaine page
-    }
-    afficherStatut("🎁 Ajout des prix du marché offerts avec l'extension…");
-    try {
-      await importerTexteCSV("les prix offerts avec l'extension", reponse.texte, true);
-    } catch (erreur) {
-      afficherStatut(`🎁 Prix offerts : ajout impossible (${erreur.message || erreur}). Tu peux réessayer avec « 📥 Importer un fichier CSV ».`);
-    }
-    // Tenté une fois pour cette version, même en cas d'échec (pas de nouvel essai à chaque page).
-    await api.storage.local.set({ prixOffertsCharges: version });
-  } finally {
-    await api.storage.local.remove("prixOffertsEnCours").catch(() => {});
-  }
-}
-setTimeout(() => {
-  chargerPrixOfferts().catch(erreur => console.log("[WikiMasters Doublons] Prix offerts :", erreur));
-}, 3000);
-
 // Les boucles qui relisent la page : seulement quand elle a changé (1.10).
 boucleSiChangement(surlignerCartesAnimees, 1500); // les cadres dorés
 boucleSiChangement(surveillerTotaux, 5000);       // les totaux de « Toutes les cartes »
@@ -7735,6 +8629,7 @@ boucleSiChangement(appliquerMarcheCompact, 700);  // 1.13 : l'affichage allégé
 boucleSiChangement(filtrerEncheresBientotFinies, 1000); // 1.14 : seulement les enchères qui finissent bientôt
 // 1.17.1 : les comptes à rebours ne réveillent plus les boucles : ce filtre-là, qui en dépend, repasse toutes les 3 s.
 boucle(() => { if (marcheBientotFini && !document.hidden) filtrerEncheresBientotFinies(); }, 3000);
+boucleSiChangement(filtrerCartesAnimeesMarche, 1000); // 1.17.8 : seulement les cartes animées (onglet « Parcourir »)
 boucleSiChangement(filtrerEncheresTropCheres, 1000);    // 1.14 : seulement les mises jusqu'à un montant  // nouveau en 1.6.1 : le cadre des bonnes affaires
 boucleSiChangement(filtrerEncheresAuDessusMoyenne, 1000); // 1.16 : cacher les cartes au-dessus du prix moyen
 boucleSiChangement(releverPrixMoyen, 1500);       // nouveau en 1.7.2 : le prix moyen affiché par le site
@@ -7756,15 +8651,45 @@ boucle(appliquerCarteATrouver, 700);      // 1.11 : trouver une carte cliquée d
 boucle(surveillerStop, 500);              // nouveau en 1.7.4 : Stop visible seulement pendant une tâche
 boucle(appliquerEchangeEnAttente, 1000);  // nouveau en 1.5 : le bouton « Échanger » d'un résultat
 boucle(surveillerEnchere, 1000);          // nouveau en 1.8 : la fin de l'enchère affichée et l'encart « 🔔 »
-boucle(poursuivreRemiseEnVente, 1000);     // 1.17.3 : la remise en vente des invendues (si demandée)
-boucle(() => { // 1.17.3 : le texte du bouton (nombre d'invendues, ou « Arrêter » pendant la remise)
-  const bouton = document.getElementById("wmd-remise");
-  if (!bouton) return;
-  const voulu = remiseEnVente ? `⏹ Arrêter la remise en vente (${remiseEnVente.file.length} restante(s))`
-    : `🔁 Remettre en vente les invendues (${ventesInvendues().length})`;
-  if (bouton.textContent !== voulu) bouton.textContent = voulu;
-}, 1000);
+boucleSiChangement(caseRevente, 500);      // 1.17.5 : la case « remettre en vente si invendue » de « Mettre aux enchères »
+boucle(surveillerReventes, 5000);         // 1.17.5 : le résultat des ventes à revendre
+boucle(poursuivreReventes, 1500);         // 1.17.5 : la remise en vente d'une invendue
+boucleSiChangement(marquerEchanges, 1000);        // 1.20 : les prix, cadres et totaux des échanges
+boucleSiChangement(releverSouhaitsAffiches, 2000); // 1.20 : ta liste de souhaits, gardée en passant
+boucle(() => afficherSouhaitsMarche(), 2000);     // 1.20 : « ⭐ Mes souhaits » sur le Marché
+boucle(signalerActionLongue, 1000);       // 1.19 : « une action longue est en cours » (pour la remise en vente)
+boucle(afficherReventes, 1000);           // 1.17.5 : la liste dans le panneau
+boucleSiChangement(marquerReventes, 1000); // 1.17.6 : le « 🔁 » sur les cartes de « Mes ventes »
 boucle(rafraichirEncheresSuivies, 1000);  // 1.15 : le temps restant défile dans « 🔔 Mes enchères suivies »
 // (version sans chargement automatique) boucle(boucleAutoMarche, 250);            // 1.17 : le chargement automatique du Marché (si activé), au quart de seconde près
 // (version sans chargement automatique) boucleSiChangement(filtrerRaretesAuto, 1000); // 1.17 : plusieurs raretés choisies : les autres sont cachées
+// ---------------------------------------------------------------------
+//  1.18 : PRIX DE BASE. Le fichier « prix-marche-wikimasters.csv » livré dans le dossier de
+//  l'extension est importé tout seul à la première utilisation (puis à chaque nouvelle version,
+//  au cas où le fichier aurait été mis à jour). C'est le même import que le bouton
+//  « 📥 Importer un fichier CSV » : il n'ajoute que ce qui manque ou ce qui est plus récent,
+//  et ne touche jamais aux prix plus récents déjà dans l'extension.
+//  Pour livrer des prix plus récents : remplace ce fichier par un nouvel export
+//  (« Exporter les prix du marché (CSV) ») et change le numéro de version du manifest.
+// ---------------------------------------------------------------------
+async function importerPrixDeBase() {
+  const version = api.runtime.getManifest().version;
+  if ((await api.storage.local.get("prixDeBase")).prixDeBase === version) return;
+  // Un seul onglet s'en charge, même si plusieurs pages WikiMasters s'ouvrent en même temps.
+  await navigator.locks.request("wmd-prix-de-base", { ifAvailable: true }, async verrou => {
+    if (!verrou) return;
+    if ((await api.storage.local.get("prixDeBase")).prixDeBase === version) return;
+    const reponse = await api.runtime.sendMessage({ type: "prix-de-base" }).catch(() => null);
+    if (!reponse) return; // pas de réponse : on réessaiera à la prochaine page
+    if (typeof reponse.texte === "string" && reponse.texte.length > 0) {
+      afficherStatut("Import des prix de base de l'extension…");
+      await importerTexteCSV("prix de base de l'extension", reponse.texte, true);
+    }
+    await api.storage.local.set({ prixDeBase: version });
+  });
+}
+setTimeout(() => {
+  if (extensionValide()) importerPrixDeBase().catch(erreur => { if (extensionValide()) console.warn("[WikiMasters Doublons]", erreur); });
+}, 3000);
+
 console.log("[WikiMasters Doublons] Extension chargée !");

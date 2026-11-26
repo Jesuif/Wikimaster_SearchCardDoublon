@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.17.5 (sans chargement automatique) - reponses-site.js
+//  WikiMasters Doublons 1.20.4 (sans chargement automatique) - reponses-site.js
 //  Nouveau en 1.15 : ce petit script tourne DANS la page du site (et non à côté,
 //  comme content.js). Il regarde les réponses que le site reçoit déjà pour son
 //  Marché (/api/marketplace…) : la liste des enchères, la page d'une enchère et
@@ -30,10 +30,6 @@
     const regle = typeof a.settled_at === "string" ? Date.parse(a.settled_at) : NaN;
     return {
       regle: Number.isFinite(regle) ? regle : null, // l'heure où l'enchère a été soldée (fin réelle)
-      // 1.17.3 : le début de l'enchère (pour retrouver sa durée et la remettre en vente à l'identique).
-      debut: ["created_at", "start_at", "started_at", "starts_at", "listed_at"].map(k => typeof a[k] === "string" ? Date.parse(a[k]) : NaN).find(Number.isFinite) || null,
-      dureeMin: ["duration_minutes", "duration_mins"].map(k => nombre(a[k])).find(v => v !== null)
-        ?? (nombre(a.duration_hours) !== null ? nombre(a.duration_hours) * 60 : null),
       id: a.id.toLowerCase(),
       fin: Number.isFinite(fin) ? fin : null,
       statut: typeof a.status === "string" ? a.status : null,
@@ -105,8 +101,42 @@
       historique: { carteId: carteId.toLowerCase(), calcule: Number.isFinite(calcule) ? calcule : Date.now(), parRarete } };
   }
 
+  // 1.20 : les échanges (/api/trades…) : on n'en retient que les cartes (identifiant, nom, rareté),
+  // pour pouvoir demander l'historique des prix d'une carte de l'échange quand tu cliques dessus.
+  const REGEX_ECHANGES = /^\/api\/trades?(?:\/|$)/i;
+  function cartesDans(donnees) {
+    const cartes = new Map();
+    const parcourir = (v, rareteAutour, profondeur) => {
+      if (!v || typeof v !== "object" || profondeur > 8 || cartes.size > 500) return;
+      if (Array.isArray(v)) { for (const x of v) parcourir(x, rareteAutour, profondeur + 1); return; }
+      const rarete = typeof v.snapshot_rarity === "string" ? v.snapshot_rarity : typeof v.rarity === "string" ? v.rarity : rareteAutour;
+      if (typeof v.id === "string" && typeof v.wikipedia_title === "string" && /^[0-9a-f-]{36}$/i.test(v.id)) {
+        cartes.set(v.id.toLowerCase(), { carteId: v.id.toLowerCase(), nom: v.wikipedia_title, rarete: rarete || null });
+      }
+      for (const x of Object.values(v)) if (x && typeof x === "object") parcourir(x, rarete, profondeur + 1);
+    };
+    parcourir(donnees, null, 0);
+    return [...cartes.values()];
+  }
+
   const fetchDuSite = window.fetch;
   if (typeof fetchDuSite !== "function") return;
+
+  // 1.17.5 : l'extension peut demander l'état d'UNE de tes enchères (une vente à revendre si invendue),
+  // exactement comme sa page le demande. La réponse repasse par la lecture ci-dessous.
+  window.addEventListener("message", evenement => {
+    const d = evenement.data;
+    if (evenement.source !== window || evenement.origin !== location.origin || !d || d.source !== "wmd-demande" || d.version !== 1) return;
+    if (d.type === "lire-enchere" && /^[0-9a-f-]{36}$/i.test(String(d.id || ""))) {
+      window.fetch(`/api/marketplace/${String(d.id).toLowerCase()}`, { credentials: "same-origin", wmdDemande: true }).catch(() => {});
+    }
+    // 1.17.7 : tes ventes (« selling »), que le Marché charge lui-même en s'ouvrant.
+    if (d.type === "lire-ventes") window.fetch("/api/marketplace", { credentials: "same-origin", wmdDemande: true }).catch(() => {});
+    // 1.20 : l'historique des prix d'une carte (comme l'onglet « Marché » de sa fiche le demande).
+    if (d.type === "lire-historique" && /^[0-9a-f-]{36}$/i.test(String(d.id || ""))) {
+      window.fetch(`/api/marketplace/cards/${String(d.id).toLowerCase()}/price-history`, { credentials: "same-origin", wmdDemande: true }).catch(() => {});
+    }
+  });
   window.fetch = function (...args) {
     const promesse = fetchDuSite.apply(this, args);
     try {
@@ -114,7 +144,16 @@
       const adresse = typeof entree === "string" ? entree : entree instanceof URL ? entree.href : entree && entree.url ? entree.url : "";
       const url = new URL(adresse, location.href);
       const historique = url.origin === location.origin ? url.pathname.match(REGEX_HISTORIQUE) : null;
-      if (historique) {
+      const echanges = url.origin === location.origin && !historique && REGEX_ECHANGES.test(url.pathname);
+      if (echanges) {
+        promesse.then(reponse => {
+          if (!reponse || !reponse.ok) return;
+          reponse.clone().json().then(donnees => {
+            const cartes = cartesDans(donnees);
+            if (cartes.length) window.postMessage({ source: SOURCE, version: 1, quand: Date.now(), id: null, cartesEchange: cartes }, location.origin);
+          }).catch(() => {});
+        }).catch(() => {});
+      } else if (historique) {
         // On lit seulement la réponse que le site a lui-même demandée.
         promesse.then(reponse => {
           if (!reponse || !reponse.ok) return;
@@ -130,6 +169,7 @@
           reponse.clone().json().then(donnees => {
             const message = resumer(donnees, url.pathname);
             if (!message) return;
+            message.demandeExtension = Boolean(args[1] && args[1].wmdDemande); // 1.17.7 : demandée par l'extension, pas par la page
             message.methode = methode;
             message.tri = url.searchParams.get("sort");
             message.page = Number(url.searchParams.get("page")) || null;

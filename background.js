@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.17.5 (sans chargement automatique) - background.js
+//  WikiMasters Doublons 1.20.4 (sans chargement automatique) - background.js
 //  Le « script d'arrière-plan » : il tourne même quand aucune page
 //  WikiMasters n'est ouverte, tant que le navigateur est lancé.
 //  Son rôle : estimer ton stock de paquets, l'afficher sur l'icône,
@@ -104,6 +104,14 @@ api.runtime.onMessage.addListener((message, expediteur, repondre) => {
   }
   if (message.type === "ouvrir-reglages") {
     ouvrirReglages(expediteur.tab);
+  }
+  // 1.18 : les prix de base livrés avec l'extension (fichier prix-marche-wikimasters.csv du dossier).
+  if (message.type === "prix-de-base") {
+    fetch(api.runtime.getURL("prix-marche-wikimasters.csv"))
+      .then(r => r.ok ? r.text() : null)
+      .catch(() => null)
+      .then(texte => repondre(typeof texte === "string" ? { texte: texte } : { absent: true }));
+    return true;
   }
   if (message.type === "tester") {
     envoyerTest().then(repondre);
@@ -765,28 +773,5 @@ api.runtime.onMessage.addListener((message, expediteur, repondre) => {
   if (message.type !== "partage-lire" && message.type !== "partage-ecrire") return;
   const tache = message.type === "partage-lire" ? partageLireFichier() : partageEcrireFichier(message.texte);
   tache.then(repondre, erreur => repondre({ erreur: erreur.message || String(erreur) }));
-  return true;
-});
-
-
-// ---------------------------------------------------------------------
-//  1.17.5 : LES PRIX DU MARCHÉ OFFERTS AVEC L'EXTENSION
-//  Le fichier « prix-marche-wikimasters.csv » est livré dans le dossier de
-//  l'extension (offert gratuitement par l'auteur). content.js demande ici son
-//  texte, puis l'ajoute aux prix de l'extension comme le bouton « 📥 Importer » :
-//  seulement ce qui manque, ou ce qui est daté d'un jour plus récent.
-//  Le fichier est lu dans le navigateur : rien n'est envoyé ni téléchargé.
-// ---------------------------------------------------------------------
-const FICHIER_PRIX_OFFERTS = "prix-marche-wikimasters.csv";
-
-async function lirePrixOfferts() {
-  const reponse = await fetch(api.runtime.getURL(FICHIER_PRIX_OFFERTS), { cache: "no-store" });
-  if (!reponse.ok) throw new Error(`fichier « ${FICHIER_PRIX_OFFERTS} » introuvable dans l'extension`);
-  return { texte: await reponse.text() };
-}
-
-api.runtime.onMessage.addListener((message, expediteur, repondre) => {
-  if (message.type !== "prix-offerts-lire") return;
-  lirePrixOfferts().then(repondre, erreur => repondre({ erreur: erreur.message || String(erreur) }));
   return true;
 });

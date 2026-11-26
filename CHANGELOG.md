@@ -2,6 +2,18 @@
 
 Les nouveautés de chaque version, de la plus récente à la plus ancienne. La liste complète des fonctionnalités est dans le [README](README.md).
 
+## 1.20.4
+
+- **Échanges** : sur la page Échanges et dans « Détail de l'échange », le prix de chaque carte, le total de chaque côté, et des cadres de couleur (vert : une carte de ta liste de souhaits ; jaune : une carte que tu n'as pas encore ; rouge : une carte que tu donnes et dont c'est ton dernier exemplaire). Un clic sur une carte propose son prix moyen, le Marché, tes amis qui l'ont et sa fiche.
+- **📚 Ta collection se met à jour toute seule** entre deux lectures : carte mise aux enchères ou défaussée, enchère remportée, vente annulée ou invendue, échange accepté.
+- **📈 « Relever son prix moyen maintenant »** dans la fiche de chaque carte, avec la date de mise à jour du prix moyen. « ? » signale une carte dont le site n'a pas de prix moyen.
+- **⭐ Mes souhaits** sur le Marché : un clic cherche la carte souhaitée au Marché.
+- **✨ Seulement les cartes animées** : nouveau filtre du Marché (onglet « Parcourir »).
+- **Enchère gagnée** : bouton « 📚 Tu l'as gagnée : la trouver dans ma collection » sur la page de l'enchère.
+- Les repères des cartes de la Collection (prix, achat, étiquette) sont rangés en colonne sous l'étoile des favoris, sans se superposer.
+- Panneau et page des réglages mieux rangés.
+- Firefox : le fichier `.xpi` change d'identifiant. Si tu avais installé la version Firefox 1.17.5, supprime-la avant d'installer celle-ci (voir le README).
+
 ## 1.17.5
 
 - **🎁 Prix du Marché offerts avec l'extension** : le fichier `prix-marche-wikimasters.csv` (40 845 cartes, prix relevés du 23 au 25 novembre 2026) est livré avec l'extension. Au premier passage sur wiki-masters.com après l'installation ou une mise à jour, il est ajouté tout seul aux prix de l'extension, exactement comme avec « 📥 Importer un fichier CSV » : seulement ce qui manque, ou ce qui est daté d'un jour plus récent. Un seul onglet s'en charge, une seule fois par version.

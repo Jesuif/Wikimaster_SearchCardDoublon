@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.17.5 (sans chargement automatique) - options.js
+//  WikiMasters Doublons 1.20.4 (sans chargement automatique) - options.js
 //  La page des réglages : elle lit et enregistre les réglages dans la
 //  mémoire de l'extension (api.storage.local). commun.js est chargé avant
 //  ce fichier : il fournit api, REGLAGES_PAR_DEFAUT, lireReglages...
@@ -12,7 +12,7 @@ const estFirefox = typeof globalThis.browser !== "undefined" && typeof browser.r
 // 1.8 : les enchères et les cartes animées du jeu.
 const CASES = ["surlignerAnimees", "etiquettes", "statistiques", "historique", "manquantes", "echanges", "badge",
   "notifPC", "notifTel", "alerteAvant", "marche", "animeesJeu", "encheres", "enchereAuto", "enchereNotifPC", "enchereNotifTel",
-  "alerteAmis"]; // 1.15
+  "alerteAmis", "suiviCollection"]; // 1.15, 1.19
 const CASES_TELEPHONE = ["notifTel", "enchereNotifTel"]; // elles demandent une autorisation dans Firefox
 const champs = {};
 for (const nom of [...CASES, "canalNtfy", "minutesParPaquet", "alerteA", "patienceMinutes", "pagesMax"]) {

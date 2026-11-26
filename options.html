@@ -8,6 +8,7 @@
     main { max-width: 640px; margin: 32px auto; padding: 0 16px; }
     h1 { font-size: 22px; }
     h2 { font-size: 17px; margin-top: 0; }
+    h3 { font-size: 14px; margin: 14px 0 4px; color: #555; } /* 1.19 : sous-titres des réglages */
     section { background: #fff; border: 1px solid #d9dcd9; border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; }
     label { display: block; margin: 8px 0; }
     input[type="text"] { width: 100%; box-sizing: border-box; padding: 6px 8px; font: inherit; margin-top: 4px; }
@@ -59,8 +60,8 @@
   <!-- 1.17 : un sommaire, pour aller directement à une partie des réglages -->
   <nav class="sommaire" aria-label="Sommaire des réglages">
     <a href="#section-fonctions">Fonctions</a>
-    <a href="#section-etiquettes">Étiquettes</a>
     <a href="#section-lecture">Lecture des pages</a>
+    <a href="#section-etiquettes">Étiquettes</a>
     <a href="#section-paquets">Paquets</a>
     <a href="#section-notifications">Notifications</a>
     <a href="#section-encheres">Enchères</a>
@@ -71,31 +72,20 @@
 
   <section id="section-fonctions">
     <h2>Fonctions de l'extension</h2>
-    <label><input type="checkbox" id="surlignerAnimees"> Entourer en doré les cartes animées (image GIF) sur le site</label>
-    <label><input type="checkbox" id="etiquettes"> Étiquettes suggérées : un badge sur chaque carte de ta Collection, et le champ « Ajouter une étiquette » pré-rempli quand tu ouvres une carte</label>
+    <h3>Ta collection</h3>
     <label><input type="checkbox" id="statistiques"> Statistiques par rareté après la lecture de ta collection</label>
     <label><input type="checkbox" id="historique"> Historique : comparer chaque lecture à la précédente (nouvelles cartes)</label>
+    <label><input type="checkbox" id="suiviCollection"> Mettre à jour ma collection toute seule entre deux lectures : carte mise aux enchères, vente annulée ou invendue, enchère remportée, carte défaussée</label>
     <label><input type="checkbox" id="manquantes"> Cartes manquantes et pourcentage par rareté (page « Toutes les cartes »)</label>
-    <label><input type="checkbox" id="echanges"> Aide aux échanges : copie pour Discord et comparaison avec un ami</label>
+    <label><input type="checkbox" id="animeesJeu"> Bouton « Trouver les cartes animées du jeu » sur la page « Toutes les cartes »</label>
+    <label><input type="checkbox" id="surlignerAnimees"> Entourer en doré les cartes animées (image GIF) sur le site</label>
+    <label><input type="checkbox" id="etiquettes"> Étiquettes suggérées : un badge sur chaque carte de ta Collection, et le champ « Ajouter une étiquette » pré-rempli quand tu ouvres une carte</label>
+    <h3>Marché et échanges</h3>
     <label><input type="checkbox" id="marche"> Marché : relever les « mises actuelles » (jamais les mises de départ) pour estimer la valeur de mes cartes</label>
     <p class="discret">Les options du Marché se règlent directement dans le panneau de l'extension, sur la page Marché,
       sous « ⚙️ Options du Marché » : cadres des bonnes affaires (en % ou en wikibidous), « + / ++ / +++ », prix gonflés 🎈,
       filtres, et une légende de tous les cadres et icônes.</p>
-    <label><input type="checkbox" id="animeesJeu"> Bouton « Trouver les cartes animées du jeu » sur la page « Toutes les cartes »</label>
-  </section>
-
-  <section id="section-etiquettes">
-    <h2>Étiquettes suggérées</h2>
-    <p>L'extension lit la courte description de chaque carte (« actrice française », « espèce de plantes »…)
-      et y cherche les mots-clés ci-dessous. Elle ne pose jamais d'étiquette elle-même : quand tu ouvres une carte,
-      elle écrit l'étiquette dans le champ du site, et c'est toi qui appuies sur Entrée.</p>
-    <p>Tes étiquettes trouvées sur le site : <span id="etiquettes-site">aucune pour l'instant</span></p>
-    <p class="discret">Si tu as déjà une étiquette équivalente (par exemple « Écrans » pour « film &amp; série »), c'est elle
-      qui est proposée. Les autres étiquettes du site sont ignorées. Pour que la liste soit complète,
-      ouvre une fois le menu « Toutes les étiquettes » de ta page Collection.</p>
-    <div id="liste-etiquettes"></div>
-    <button id="ajouter-etiquette" type="button">Ajouter une étiquette</button>
-    <button id="etiquettes-defaut" type="button" class="secondaire">Remettre les étiquettes de départ</button>
+    <label><input type="checkbox" id="echanges"> Aide aux échanges : copie pour Discord et comparaison avec un ami</label>
   </section>
 
   <section id="section-lecture">
@@ -116,6 +106,20 @@
       <input type="number" id="pagesMax" min="10" max="20000" step="10" style="width: 5em"> pages</label>
     <p class="discret">Une page compte 50 cartes et demande environ 3 secondes : 300 pages ≈ 15 minutes, 3 000 pages ≈ 2 h 30.
       Choisis plutôt une rareté avec les filtres du site (L, UR, SR…) : le jeu compte des millions de cartes communes.</p>
+  </section>
+
+  <section id="section-etiquettes">
+    <h2>Étiquettes suggérées</h2>
+    <p>L'extension lit la courte description de chaque carte (« actrice française », « espèce de plantes »…)
+      et y cherche les mots-clés ci-dessous. Elle ne pose jamais d'étiquette elle-même : quand tu ouvres une carte,
+      elle écrit l'étiquette dans le champ du site, et c'est toi qui appuies sur Entrée.</p>
+    <p>Tes étiquettes trouvées sur le site : <span id="etiquettes-site">aucune pour l'instant</span></p>
+    <p class="discret">Si tu as déjà une étiquette équivalente (par exemple « Écrans » pour « film &amp; série »), c'est elle
+      qui est proposée. Les autres étiquettes du site sont ignorées. Pour que la liste soit complète,
+      ouvre une fois le menu « Toutes les étiquettes » de ta page Collection.</p>
+    <div id="liste-etiquettes"></div>
+    <button id="ajouter-etiquette" type="button">Ajouter une étiquette</button>
+    <button id="etiquettes-defaut" type="button" class="secondaire">Remettre les étiquettes de départ</button>
   </section>
 
   <section id="section-paquets">

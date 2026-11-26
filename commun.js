@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.17.5 (sans chargement automatique) - commun.js
+//  WikiMasters Doublons 1.20.4 (sans chargement automatique) - commun.js
 //  Nouveau en 1.3 : ce fichier est partagé par les trois parties de
 //  l'extension (content.js, background.js et la page des réglages).
 //  On y range ce qui doit être identique partout, pour ne l'écrire qu'une fois.
@@ -14,6 +14,7 @@ const REGLAGES_PAR_DEFAUT = {
   etiquettes: true,         // 1.9 (repris de la branche 1.4) : étiquettes suggérées pour chaque carte
   statistiques: true,       // statistiques par rareté après la lecture de la collection
   historique: true,         // comparer chaque lecture à la précédente
+  suiviCollection: true,    // 1.19 : collection corrigée toute seule (mises en vente, achats, défausses...)
   manquantes: true,         // cartes manquantes et pourcentage par rareté
   echanges: true,           // copie pour Discord et comparaison avec un ami
   badge: true,              // nombre de paquets estimé sur l'icône de l'extension
