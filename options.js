@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.20.6 (sans chargement automatique) - options.js
+//  WikiMasters Doublons 1.21.0 (sans chargement automatique) - options.js
 //  La page des réglages : elle lit et enregistre les réglages dans la
 //  mémoire de l'extension (api.storage.local). commun.js est chargé avant
 //  ce fichier : il fournit api, REGLAGES_PAR_DEFAUT, lireReglages...
@@ -12,7 +12,7 @@ const estFirefox = typeof globalThis.browser !== "undefined" && typeof browser.r
 // 1.8 : les enchères et les cartes animées du jeu.
 const CASES = ["surlignerAnimees", "etiquettes", "statistiques", "historique", "manquantes", "echanges", "badge",
   "notifPC", "notifTel", "alerteAvant", "marche", "animeesJeu", "encheres", "enchereAuto", "enchereNotifPC", "enchereNotifTel",
-  "alerteAmis", "suiviCollection"]; // 1.15, 1.19
+  "alerteAmis", "suiviCollection", "badgePrixMoyen", "badgePrixAchat"]; // 1.15, 1.19, 1.21
 const CASES_TELEPHONE = ["notifTel", "enchereNotifTel"]; // elles demandent une autorisation dans Firefox
 const champs = {};
 for (const nom of [...CASES, "canalNtfy", "minutesParPaquet", "alerteA", "patienceMinutes", "pagesMax"]) {
@@ -684,3 +684,42 @@ document.getElementById("partage-tester").addEventListener("click", async () => 
   }
 });
 afficherPartage();
+
+// ---------------------------------------------------------------------
+//  1.21 : le rangement du menu (l'ordre des groupes du panneau, mémoire « ordrePanneau »)
+// ---------------------------------------------------------------------
+async function afficherRangement() {
+  const { ordrePanneau } = await api.storage.local.get("ordrePanneau");
+  const choisis = ordrePanneau && Array.isArray(ordrePanneau.groupes) ? ordrePanneau.groupes.filter(id => ORDRE_GROUPES.includes(id)) : [];
+  const ordre = [...choisis, ...ORDRE_GROUPES.filter(id => !choisis.includes(id))];
+  const liste = document.getElementById("rangement-liste");
+  liste.replaceChildren();
+  ordre.forEach((id, i) => {
+    const ligne = document.createElement("li");
+    ligne.className = "ligne-delai";
+    ligne.append(document.createTextNode(NOMS_GROUPES[id] + " "));
+    for (const [texte, sens, titre] of [["↑", -1, "Monter"], ["↓", 1, "Descendre"]]) {
+      const bouton = document.createElement("button");
+      bouton.type = "button";
+      bouton.className = "petit";
+      bouton.textContent = texte;
+      bouton.title = titre;
+      bouton.disabled = (sens < 0 && i === 0) || (sens > 0 && i === ordre.length - 1);
+      bouton.addEventListener("click", async () => {
+        const nouvel = [...ordre];
+        [nouvel[i], nouvel[i + sens]] = [nouvel[i + sens], nouvel[i]];
+        const { ordrePanneau: actuel } = await api.storage.local.get("ordrePanneau");
+        await api.storage.local.set({ ordrePanneau: { ...(actuel || {}), groupes: nouvel } });
+        afficherRangement();
+      });
+      ligne.append(bouton, document.createTextNode(" "));
+    }
+    liste.appendChild(ligne);
+  });
+}
+document.getElementById("rangement-defaut").addEventListener("click", async () => {
+  await api.storage.local.remove("ordrePanneau");
+  afficherRangement();
+});
+api.storage.onChanged.addListener(changements => { if (changements.ordrePanneau) afficherRangement(); });
+afficherRangement();

@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.20.6 (sans chargement automatique) - commun.js
+//  WikiMasters Doublons 1.21.0 (sans chargement automatique) - commun.js
 //  Nouveau en 1.3 : ce fichier est partagé par les trois parties de
 //  l'extension (content.js, background.js et la page des réglages).
 //  On y range ce qui doit être identique partout, pour ne l'écrire qu'une fois.
@@ -11,6 +11,8 @@ const api = globalThis.browser ?? globalThis.chrome;
 // Tous les réglages, avec leur valeur de départ. Chaque fonction de l'extension a sa case à cocher.
 const REGLAGES_PAR_DEFAUT = {
   surlignerAnimees: true,   // cadre doré autour des cartes animées
+  badgePrixMoyen: true,     // 1.21 : le prix moyen (« $ », « ? ») et les prix du Marché sur les cartes de ta Collection
+  badgePrixAchat: true,     // 1.21 : le prix d'achat « 🛒 » sur les cartes de ta Collection
   etiquettes: true,         // 1.9 (repris de la branche 1.4) : étiquettes suggérées pour chaque carte
   statistiques: true,       // statistiques par rareté après la lecture de la collection
   historique: true,         // comparer chaque lecture à la précédente
@@ -51,6 +53,14 @@ const REGLAGES_PAR_DEFAUT = {
   animeesJeu: true,         // bouton « Trouver les cartes animées » sur « Toutes les cartes »
   pagesMax: 300,            // au-delà, les recherches sur « Toutes les cartes » refusent de démarrer
   patienceMinutes: 3        // si une page tarde, on réessaie pendant ce temps avant d'abandonner
+};
+
+// 1.21 : les groupes du panneau (pour le rangement du menu, aussi dans les Réglages).
+// L'ordre par défaut des groupes du panneau : du plus utilisé au plus rare.
+const ORDRE_GROUPES = ["wmd-groupe-page", "wmd-souhaits-marche", "wmd-groupe-amis", "wmd-groupe-prix", "wmd-groupe-affichage", "wmd-options-marche"];
+const NOMS_GROUPES = {
+  "wmd-groupe-page": "📚 Ma collection", "wmd-souhaits-marche": "⭐ Mes souhaits (Marché)", "wmd-groupe-amis": "🔔 Enchères et amis",
+  "wmd-groupe-prix": "💰 Prix et fichiers", "wmd-groupe-affichage": "🎨 Affichage des cartes", "wmd-options-marche": "⚙️ Options du Marché"
 };
 
 // Nouveau en 1.8 : les alertes d'enchères permises (de 1 minute à 3 jours avant la fin), 10 au plus.

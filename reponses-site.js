@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.20.6 (sans chargement automatique) - reponses-site.js
+//  WikiMasters Doublons 1.21.0 (sans chargement automatique) - reponses-site.js
 //  Nouveau en 1.15 : ce petit script tourne DANS la page du site (et non à côté,
 //  comme content.js). Il regarde les réponses que le site reçoit déjà pour son
 //  Marché (/api/marketplace…) : la liste des enchères, la page d'une enchère et

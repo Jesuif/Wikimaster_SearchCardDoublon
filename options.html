@@ -67,6 +67,7 @@
     <a href="#section-encheres">Enchères</a>
     <a href="#section-amis">Amis</a>
     <a href="#section-partage">Prix partagés</a>
+    <a href="#section-rangement">Menu</a>
     <a href="#section-memoire">Mémoire</a>
   </nav>
 
@@ -79,6 +80,9 @@
     <label><input type="checkbox" id="manquantes"> Cartes manquantes et pourcentage par rareté (page « Toutes les cartes »)</label>
     <label><input type="checkbox" id="animeesJeu"> Bouton « Trouver les cartes animées du jeu » sur la page « Toutes les cartes »</label>
     <label><input type="checkbox" id="surlignerAnimees"> Entourer en doré les cartes animées (image GIF) sur le site</label>
+    <label><input type="checkbox" id="badgePrixMoyen"> Afficher le prix moyen (« $ », « ? ») et les prix du Marché sur les cartes de ma Collection</label>
+    <label><input type="checkbox" id="badgePrixAchat"> Afficher le prix d'achat (« 🛒 ») sur les cartes de ma Collection</label>
+    <p class="discret">Ces trois affichages se règlent aussi dans le panneau de l'extension, sous « 🎨 Affichage des cartes ».</p>
     <label><input type="checkbox" id="etiquettes"> Étiquettes suggérées : un badge sur chaque carte de ta Collection, et le champ « Ajouter une étiquette » pré-rempli quand tu ouvres une carte</label>
     <h3>Marché et échanges</h3>
     <label><input type="checkbox" id="marche"> Marché : relever les « mises actuelles » (jamais les mises de départ) pour estimer la valeur de mes cartes</label>
@@ -243,6 +247,15 @@
     <p class="discret">Le code n'est jamais réaffiché : une fois enregistré, le champ reste vide. Tape un nouveau code pour le changer.</p>
     <button id="partage-tester" type="button">Tester</button>
     <p class="discret" id="partage-etat"></p>
+  </section>
+
+  <!-- 1.21 : l'ordre des groupes du panneau -->
+  <section id="section-rangement">
+    <h2>Rangement du menu</h2>
+    <p class="discret">L'ordre des groupes du panneau de l'extension. Tu peux aussi les ranger directement dans le panneau :
+      clique sur « ✥ » (en haut du panneau), glisse les groupes (par leur titre) et les boutons où tu veux, puis reclique sur « ✥ ».</p>
+    <ol id="rangement-liste"></ol>
+    <button id="rangement-defaut" type="button" class="petit">Revenir à l'ordre de départ (groupes et boutons)</button>
   </section>
 
   <section id="section-memoire">

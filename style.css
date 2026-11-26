@@ -863,3 +863,14 @@ html.wmd-marche-compact .wmd-icone { width: 18px; height: 18px; font-size: 10px;
 }
 .wmd-badge-en-vente::before { content: attr(data-texte); }
 .wmd-pile > .wmd-badge-en-vente { order: 0; }
+/* 1.21 : le rangement du menu (« ✥ ») */
+#wmd-panneau .wmd-titre-boutons #wmd-ranger.wmd-actif { background: #b8892c; color: #1b1d1b; }
+#wmd-panneau.wmd-rangement .wmd-groupe, #wmd-panneau.wmd-rangement > details.wmd-bloc {
+  outline: 1px dashed #6b7a8f; outline-offset: 2px; border-radius: 6px;
+}
+#wmd-panneau.wmd-rangement .wmd-groupe-titre, #wmd-panneau.wmd-rangement > details.wmd-bloc > summary,
+#wmd-panneau.wmd-rangement .wmd-groupe > button, #wmd-panneau.wmd-rangement .wmd-groupe > label { cursor: grab; touch-action: none; user-select: none; }
+#wmd-panneau.wmd-rangement .wmd-groupe-titre::before, #wmd-panneau.wmd-rangement > details.wmd-bloc > summary::after { content: "⠿ "; color: #b8892c; }
+#wmd-panneau.wmd-rangement .wmd-groupe > button::before, #wmd-panneau.wmd-rangement .wmd-groupe > label::before { content: "⠿ "; color: #b8892c; }
+#wmd-panneau .wmd-en-deplacement { opacity: 0.6; cursor: grabbing; }
+#wmd-panneau #wmd-groupe-affichage label.wmd-case { display: block; margin: 3px 0; }

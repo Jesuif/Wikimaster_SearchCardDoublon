@@ -13,7 +13,7 @@ Une extension gratuite pour [wiki-masters.com](https://www.wiki-masters.com/). E
 
 ## Fonctionnalités
 
-L'extension ajoute sur le site un panneau flottant, en bas à droite (réduit au départ, avec les boutons **📋** mes listes, **⚙️** réglages et **− / +**). Ses boutons sont rangés par groupes et n'apparaissent que sur les pages où ils servent. Chaque fonction peut être activée ou désactivée dans la page des réglages.
+L'extension ajoute sur le site un panneau flottant, en bas à droite (réduit au départ, avec les boutons **📋** mes listes, **⚙️** réglages et **− / +**). Ses boutons sont rangés par groupes (📚 Ma collection, ⭐ Mes souhaits, 🔔 Enchères et amis, 💰 Prix et fichiers, 🎨 Affichage des cartes, ⚙️ Options du Marché) et n'apparaissent que sur les pages où ils servent. Chaque fonction peut être activée ou désactivée dans la page des réglages.
 
 ### Collection et doublons
 
@@ -21,7 +21,7 @@ L'extension ajoute sur le site un panneau flottant, en bas à droite (réduit au
 - **Affiche vos doublons**, triés par quantité, rareté, nom ou animation.
 - **Statistiques par rareté** : exemplaires, cartes différentes, doublons, cartes animées.
 - **Historique** de vos 30 dernières lectures, avec les nouvelles cartes depuis la précédente.
-- **Votre collection reste à jour entre deux lectures** : les cartes des paquets ouverts, les enchères remportées et les échanges acceptés sont ajoutés, une carte défaussée ou donnée est retirée. Une carte mise aux enchères reste dans votre collection, grisée (« 🔨 en vente ») : elle est retirée si elle se vend, et redevient normale si la vente est annulée ou finit sans acheteur.
+- **Votre collection reste à jour entre deux lectures** : les cartes des paquets ouverts, les enchères remportées et les échanges acceptés sont ajoutés, une carte défaussée ou donnée est retirée. Une carte mise aux enchères reste dans votre collection, marquée « 🔨 en vente » (« 🔨 1 en vente sur 2 » si vous en avez plusieurs ; grisée seulement quand tous vos exemplaires sont en vente) : elle est retirée si elle se vend, et redevient normale si la vente est annulée ou finit sans acheteur.
 - **Exports** en CSV (Excel) ou JSON, et **📥 import** d'un fichier exporté (collection ou prix).
 - Les cartes **L+ (shiny)** sont comptées comme des L.
 
@@ -72,7 +72,7 @@ L'extension est livrée avec un fichier de prix, **offert gratuitement par l'aut
 
 ### Étiquettes
 
-- **Suggère une étiquette** pour chaque carte (comédiens, politique, film & série, flore, insectes, faune, musique, carte animée) d'après sa description : un badge sur la Collection, et l'étiquette écrite dans le champ « Ajouter une étiquette » quand vous ouvrez la carte. **C'est toujours vous qui appuyez sur Entrée.** Noms et mots-clés modifiables, étiquettes personnelles possibles.
+- **Suggère une étiquette** pour chaque carte (comédiens, politique, film & série, flore, insectes, faune, musique, carte animée) d'après sa description : un badge sur la Collection (seulement tant qu'elle n'est pas posée), et l'étiquette écrite dans le champ « Ajouter une étiquette » quand vous ouvrez la carte. **C'est toujours vous qui appuyez sur Entrée.** Noms et mots-clés modifiables, étiquettes personnelles possibles.
 
 ### Paquets et notifications
 
@@ -83,6 +83,8 @@ L'extension est livrée avec un fichier de prix, **offert gratuitement par l'aut
 
 - **Un clic sur le nom d'une carte** dans le panneau la cherche dans votre Collection, au Marché ou dans « Toutes les cartes ».
 - **Vos listes sont gardées** (doublons, collection, cartes manquantes, enchères suivies…) : la dernière revient sur les autres pages, et **📋** les rouvre toutes.
+- **Menu rangé à votre façon** : cliquez sur **« ✥ »** en haut du panneau, glissez les groupes (par leur titre) et les boutons où vous voulez, puis recliquez sur « ✥ ». L'ordre est gardé. La page des réglages a aussi une partie « Rangement du menu » (↑ / ↓, et retour à l'ordre de départ).
+- **🎨 Affichage des cartes** : choisissez ce qui s'affiche sur les cartes du site (cadre des cartes animées, prix moyen, prix d'achat), depuis le panneau ou les réglages.
 
 ### Ce que l'extension ne fait pas
 
@@ -159,7 +161,7 @@ Il faut **Mozilla Firefox version 140** ou plus récente (menu ≡ > Aide > À p
 7. **Prix du marché** : les prix offerts sont déjà là. Passez simplement sur la page **Marché** pour en relever de nouveaux ; ils s'affichent tout seuls dans le panneau, y compris après une recherche. Lisez votre collection au moins une fois, puis cliquez sur **Estimer la valeur de mes cartes** (page Marché ou Collection). **Exporter les prix du marché (CSV)** enregistre tous les prix connus.
 8. **Alertes d'enchères** : dans les réglages, partie « Enchères », réglez vos alertes (« + Ajouter une alerte ») et où les recevoir. Misez comme d'habitude : l'enchère est suivie toute seule. L'encart « 🔔 » sur la page de l'enchère montre l'heure de fin lue ; si elle n'a pas pu être lue, tapez le temps restant.
 9. **Cartes animées du jeu** : sur **Toutes les cartes**, choisissez une rareté (L, UR, SR…) avec les filtres du site, puis cliquez sur **« ✨ Trouver les cartes animées du jeu »**. Repères (novembre 2026) : L ≈ 1 650 cartes (33 pages, quelques minutes), UR ≈ 11 100 (223 pages, environ 12 minutes) ; SR ≈ 62 000 (1 244 pages, environ 1 heure : augmentez le maximum de pages dans les réglages) ; R, PC et C sont beaucoup trop nombreuses. Recommencez avec d'autres raretés : les résultats s'additionnent. **« ✨ Revoir les cartes animées trouvées »** les réaffiche, aussi sur la page Collection.
-10. **Étiquettes suggérées** : sur votre Collection, un badge bleu indique l'étiquette à poser, un badge vert « ✓ » qu'elle est déjà posée. Cliquez sur une carte : l'étiquette est écrite dans le champ « Ajouter une étiquette », appuyez sur Entrée pour la poser (ou tapez autre chose). Ouvrez une fois le menu « Toutes les étiquettes » de la page Collection pour que l'extension connaisse toutes vos étiquettes existantes.
+10. **Étiquettes suggérées** : sur votre Collection, un badge bleu indique l'étiquette à poser (il disparaît une fois l'étiquette posée). Cliquez sur une carte : l'étiquette est écrite dans le champ « Ajouter une étiquette », appuyez sur Entrée pour la poser (ou tapez autre chose). Ouvrez une fois le menu « Toutes les étiquettes » de la page Collection pour que l'extension connaisse toutes vos étiquettes existantes.
 11. **Trouver une carte** : dans le panneau, cliquez sur le nom d'une carte (doublons, cartes manquantes, cartes animées, prix…). Choisissez **Dans ma collection**, **Au Marché** ou **Dans « Toutes les cartes »** : l'extension fait la recherche du site pour vous et ouvre la fiche de la carte.
 12. **Une lecture s'est arrêtée ?** Cliquez sur **« Reprendre la lecture »** dans le panneau, sans changer de page ni recharger (un rechargement remettrait le site à la page 1 et effacerait les filtres).
 13. **Pas de notification sur l'ordinateur ?** Vérifiez que « Sur ce PC » est coché, que les notifications du navigateur sont autorisées dans Windows (Paramètres > Système > Notifications) et que « Ne pas déranger » est désactivé. La page des réglages contient une aide pas à pas.
@@ -222,4 +224,4 @@ Pensez aussi à vous désabonner du canal dans l'application ntfy si vous l'util
 
 ---
 
-Version 1.20.6 · Auteur : Jesuif — extension non officielle, sans lien avec WikiMasters.
+Version 1.21.0 · Auteur : Jesuif — extension non officielle, sans lien avec WikiMasters.

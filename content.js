@@ -1,5 +1,5 @@
 // =====================================================================
-//  WikiMasters Doublons 1.20.6 (sans chargement automatique) - content.js
+//  WikiMasters Doublons 1.21.0 (sans chargement automatique) - content.js
 //  Le navigateur injecte ce script dans chaque page de wiki-masters.com,
 //  juste après commun.js (qui fournit api, RARETES, lireReglages...).
 //  Nouveau en 1.3 : statistiques, historique, cartes manquantes et aide
@@ -231,6 +231,8 @@ api.storage.onChanged.addListener(changements => {
   if (changements.reglages) {
     reglages = { ...REGLAGES_PAR_DEFAUT, ...changements.reglages.newValue };
     actualiserPanneau();
+    afficherCasesAffichage(); // 1.21
+    versionPage++; // 1.21 : les repères des cartes suivent tout de suite (prix, cartes animées…)
     afficherSeuilsPanneau(); // 1.14
   }
   if (changements.catalogue) catalogue = changements.catalogue.newValue ?? null;
@@ -388,6 +390,9 @@ function creerPanneau() {
     if (panneau.classList.contains("wmd-reduit")) reduire.click();
     afficherMesListes();
   }, icones, "Mes listes : doublons, collection, cartes manquantes, cartes animées, enchères…");
+  // 1.21 : « ✥ » : ranger le menu à sa façon (glisser-déposer les groupes et les boutons).
+  ajouterBouton("wmd-ranger", "✥", () => basculerRangement(), icones,
+    "Ranger le menu : glisse les groupes et les boutons où tu veux, puis reclique sur ✥ (l'ordre est gardé)");
   ajouterBouton("wmd-reglages", "⚙️", () => {
     api.runtime.sendMessage({ type: "ouvrir-reglages" }).catch(() => {});
   }, icones, "Réglages et notifications (nouvel onglet)");
@@ -444,6 +449,20 @@ function creerPanneau() {
   ajouterBouton("wmd-prix-csv", "Exporter les prix du marché (CSV)", () => exporterPrixMarche(), gPrix);
   ajouterBouton("wmd-csv", "Exporter ma collection en CSV (Excel)", () => exporterCSV(), gPrix);
   ajouterBouton("wmd-importer", "📥 Importer un fichier CSV (collection ou prix)", () => choisirFichierImport(), gPrix); // 1.10
+  // 1.21 : « 🎨 Affichage des cartes » : ce que l'extension ajoute sur les cartes, à cocher ou décocher ici.
+  const gAffichage = groupe("wmd-groupe-affichage", "🎨 Affichage des cartes");
+  for (const [nom, texte, aide] of CASES_AFFICHAGE) {
+    const ligne = creer("label", undefined, "wmd-case");
+    ligne.id = `wmd-case-${nom}`;
+    ligne.title = aide;
+    const coche = creer("input");
+    coche.type = "checkbox";
+    coche.dataset.reglage = nom;
+    coche.checked = reglages[nom] !== false;
+    coche.addEventListener("change", () => changerReglage(nom, coche.checked));
+    ligne.append(coche, document.createTextNode(" " + texte));
+    gAffichage.appendChild(ligne);
+  }
   // 1.17.5 : les ventes à remettre en vente si invendues (case cochée dans « Mettre aux enchères »).
   const blocReventes = creer("div", undefined, "wmd-groupe wmd-reventes");
   blocReventes.id = "wmd-reventes";
@@ -773,11 +792,134 @@ function creerPanneau() {
     if (evenement.target instanceof Element && evenement.target.closest("summary")) prixPage.dataset.choisi = "1"; // ton choix est gardé
   });
   panneau.append(echange, prixPage, resultats);
+  ordreBoutonsDefaut = lireOrdreAffiche(panneau).boutons; // 1.21 : pour « Revenir à l'ordre de départ »
+  appliquerOrdrePanneau(panneau); // 1.21 : l'ordre choisi (par défaut, ou rangé par toi)
 
   document.body.appendChild(panneau);
   actualiserPanneau();
   restaurerVue(); // 1.15 : la dernière liste affichée revient (après un changement de page ou un retour en jeu)
 }
+
+// ---------------------------------------------------------------------
+//  1.21 : L'AFFICHAGE DES CARTES ET LE RANGEMENT DU MENU
+//  « 🎨 Affichage des cartes » : trois cases (cartes animées en doré, prix moyen, prix d'achat), les mêmes
+//  que dans les Réglages. « ✥ » (barre de titre) : le mode rangement. Les groupes et les boutons se
+//  glissent à la souris ; l'ordre est gardé (mémoire « ordrePanneau ») et se règle aussi dans les Réglages.
+// ---------------------------------------------------------------------
+const CASES_AFFICHAGE = [
+  ["surlignerAnimees", "✨ Mettre en valeur les cartes animées", "Cadre doré et « ✨ animée » sur les cartes animées (image GIF)"],
+  ["badgePrixMoyen", "$ Prix moyen et prix du Marché sur ma Collection", "Le badge « $ » (ou « ? ») et les prix min / max du Marché sur tes cartes"],
+  ["badgePrixAchat", "🛒 Prix d'achat sur ma Collection", "Le badge orange « 🛒 » des cartes achetées aux enchères"]
+];
+async function changerReglage(nom, valeur) {
+  const lus = await lireReglages();
+  lus[nom] = valeur;
+  await api.storage.local.set({ reglages: lus });
+}
+function afficherCasesAffichage() {
+  for (const coche of document.querySelectorAll("#wmd-groupe-affichage input[data-reglage]")) {
+    const attendu = reglages[coche.dataset.reglage] !== false;
+    if (coche.checked !== attendu) coche.checked = attendu;
+  }
+}
+let ordrePanneau = null; // { groupes: [ids], boutons: { idGroupe: [ids] } }
+let ordreBoutonsDefaut = {};
+api.storage.local.get("ordrePanneau").then(({ ordrePanneau: lu }) => {
+  ordrePanneau = lu && typeof lu === "object" ? lu : null;
+  const panneau = document.getElementById("wmd-panneau");
+  if (panneau) appliquerOrdrePanneau(panneau);
+}).catch(() => {});
+api.storage.onChanged.addListener(changements => {
+  if (!changements.ordrePanneau) return;
+  ordrePanneau = changements.ordrePanneau.newValue || null;
+  const panneau = document.getElementById("wmd-panneau");
+  if (panneau && !panneau.classList.contains("wmd-rangement")) appliquerOrdrePanneau(panneau);
+});
+// Range les groupes (avant les listes de résultats) et les boutons de chaque groupe dans l'ordre choisi.
+function appliquerOrdrePanneau(panneau) {
+  const repere = panneau.querySelector("#wmd-echange");
+  if (!repere) return;
+  const choisis = ordrePanneau && Array.isArray(ordrePanneau.groupes) ? ordrePanneau.groupes.filter(id => ORDRE_GROUPES.includes(id)) : [];
+  const ordre = [...choisis, ...ORDRE_GROUPES.filter(id => !choisis.includes(id))];
+  for (const id of ordre) {
+    const bloc = panneau.querySelector(`#${id}`);
+    if (!bloc) continue;
+    repere.before(bloc);
+    if (id === "wmd-groupe-amis") { const reventes = panneau.querySelector("#wmd-reventes"); if (reventes) bloc.after(reventes); }
+    const boutons = ordrePanneau && ordrePanneau.boutons && Array.isArray(ordrePanneau.boutons[id]) ? ordrePanneau.boutons[id] : ordreBoutonsDefaut[id] || [];
+    for (const idBouton of boutons) {
+      const bouton = bloc.querySelector(`:scope > #${CSS.escape(idBouton)}`);
+      if (bouton) bloc.appendChild(bouton);
+    }
+  }
+}
+function lireOrdreAffiche(panneau) {
+  const groupes = [...panneau.children].map(e => e.id).filter(id => ORDRE_GROUPES.includes(id));
+  const boutons = {};
+  for (const id of groupes) {
+    const bloc = panneau.querySelector(`#${id}`);
+    if (bloc.classList.contains("wmd-groupe")) boutons[id] = [...bloc.children].filter(e => e.id && e.tagName !== "SUMMARY" && !e.classList.contains("wmd-groupe-titre")).map(e => e.id);
+  }
+  return { groupes, boutons };
+}
+function basculerRangement() {
+  const panneau = document.getElementById("wmd-panneau");
+  if (!panneau) return;
+  const actif = panneau.classList.toggle("wmd-rangement");
+  if (actif && panneau.classList.contains("wmd-reduit")) document.getElementById("wmd-reduire").click();
+  const bouton = document.getElementById("wmd-ranger");
+  if (bouton) bouton.classList.toggle("wmd-actif", actif);
+  if (actif) {
+    afficherStatut("✥ Rangement : glisse un groupe (par son titre) ou un bouton à sa nouvelle place. Reclique sur ✥ quand c'est fini.", { garder: 3000 });
+    return;
+  }
+  ordrePanneau = lireOrdreAffiche(panneau);
+  api.storage.local.set({ ordrePanneau }).catch(() => {});
+  afficherStatut("✥ Menu rangé : ton ordre est gardé (Réglages, « Rangement du menu », pour revenir à l'ordre de départ).", GARDER_5S);
+}
+// Le glisser-déposer (souris, stylet ou doigt), seulement en mode rangement.
+let rangementEnCours = null;
+document.addEventListener("pointerdown", evenement => {
+  const panneau = document.getElementById("wmd-panneau");
+  if (!panneau || !panneau.classList.contains("wmd-rangement") || evenement.button !== 0) return;
+  const cible = evenement.target instanceof Element ? evenement.target : null;
+  if (!cible || !panneau.contains(cible) || cible.closest(".wmd-titre")) return;
+  const groupe = cible.closest(ORDRE_GROUPES.map(id => `#${id}`).join(","));
+  if (!groupe || groupe.parentElement !== panneau) return;
+  const titreGroupe = cible.closest(".wmd-groupe-titre, summary");
+  const bouton = !titreGroupe && groupe.classList.contains("wmd-groupe") ? cible.closest(`#${groupe.id} > button, #${groupe.id} > label`) : null;
+  const element = titreGroupe && titreGroupe.parentElement === groupe ? groupe : bouton;
+  if (!element) return;
+  evenement.preventDefault();
+  rangementEnCours = { element, parent: element.parentElement, groupe: element === groupe };
+  element.classList.add("wmd-en-deplacement");
+  try { element.setPointerCapture(evenement.pointerId); } catch (erreur) { /* rien */ }
+}, true);
+document.addEventListener("pointermove", evenement => {
+  if (!rangementEnCours) return;
+  const { element, parent, groupe } = rangementEnCours;
+  const voisins = [...parent.children].filter(e => e !== element && !e.hidden && (groupe ? ORDRE_GROUPES.includes(e.id)
+    : e.id && (e.tagName === "BUTTON" || e.tagName === "LABEL")));
+  const apres = voisins.find(e => { const r = e.getBoundingClientRect(); return evenement.clientY < r.top + r.height / 2; });
+  if (apres) { if (element.nextElementSibling !== apres) apres.before(element); }
+  else if (voisins.length) { const dernier = voisins[voisins.length - 1]; if (dernier.nextElementSibling !== element) dernier.after(element); }
+  if (groupe) { const amis = parent.querySelector("#wmd-groupe-amis"), reventes = parent.querySelector("#wmd-reventes"); if (amis && reventes && amis.nextElementSibling !== reventes) amis.after(reventes); }
+}, true);
+const finirGlisser = () => {
+  if (!rangementEnCours) return;
+  rangementEnCours.element.classList.remove("wmd-en-deplacement");
+  rangementEnCours = null;
+};
+document.addEventListener("pointerup", finirGlisser, true);
+document.addEventListener("pointercancel", finirGlisser, true);
+// En mode rangement, un clic ne lance rien (ni bouton, ni case, ni sous-menu).
+document.addEventListener("click", evenement => {
+  const panneau = document.getElementById("wmd-panneau");
+  const cible = evenement.target instanceof Element ? evenement.target : null;
+  if (!panneau || !panneau.classList.contains("wmd-rangement") || !cible || !panneau.contains(cible) || cible.closest(".wmd-titre")) return;
+  evenement.preventDefault();
+  evenement.stopPropagation();
+}, true);
 
 // Nouveau en 1.3 : chaque bouton n'apparaît que sur la bonne page, et si sa fonction est activée.
 function actualiserPanneau() {
@@ -5516,11 +5658,12 @@ api.storage.onChanged.addListener(changements => {
 let marquageEnCours = false;
 async function marquerCartesEstimees() {
   if (marquageEnCours) return;
-  const actif = reglages.marche && pageActuelle() === "collection";
+  const actif = reglages.marche && reglages.badgePrixMoyen && pageActuelle() === "collection"; // 1.21 : désactivable
   const cadres = trouverCadresDeCartes();
   if (!actif) {
     for (const { cadre } of cadres) {
       cadre.classList.remove("wmd-carte-prix"); delete cadre.dataset.wmdBadge;
+      if (cadre.dataset.wmdPrix) { delete cadre.dataset.wmdPrix; if (/\(WikiMasters Doublons\)$/.test(cadre.title)) cadre.removeAttribute("title"); }
       badgeDansPile(cadre, "wmd-badge-prix", null);
       badgeDansPile(cadre, "wmd-badge-marche", null);
     }
@@ -7181,11 +7324,17 @@ function marquerAchats() {
       const nom = cadre.querySelector(CONFIG.selecteurNomCarte).textContent.trim();
       const trouve = imageRarete.getAttribute("src").match(/rarity\/([a-z_]+)\./);
       // 1.20.6 : une carte en vente est grisée (« 🔨 en vente »), jusqu'à la fin de la vente.
+      // 1.21 : grisée seulement si TOUS tes exemplaires sont en vente (une carte en double, dont un seul
+      // exemplaire est en vente, reste en couleur avec « 🔨 1 en vente sur 2 »).
       const enVente = actif && trouve ? nombreEnVente(nom, trouve[1]) : 0;
-      cadre.classList.toggle("wmd-en-vente", enVente > 0);
-      const badgeVente = badgeDansPile(cadre, "wmd-badge-en-vente", enVente ? `🔨 ${enVente > 1 ? enVente + " " : ""}en vente` : null);
-      if (badgeVente) badgeVente.title = enVente > 1 ? `${enVente} exemplaires en vente au Marché` : "En vente au Marché : retirée si elle est vendue, dégrisée sinon";
-      const liste = actif && trouve ? achatsDe(nom, trouve[1]) : [];
+      const possedes = enVente && trouve ? quantiteConnue(nom, trouve[1]) : 0;
+      const toutes = enVente > 0 && (!possedes || enVente >= possedes);
+      cadre.classList.toggle("wmd-en-vente", toutes);
+      const texteVente = !enVente ? null : toutes ? `🔨 ${enVente > 1 ? enVente + " " : ""}en vente` : `🔨 ${enVente} en vente sur ${possedes}`;
+      const badgeVente = badgeDansPile(cadre, "wmd-badge-en-vente", texteVente);
+      if (badgeVente) badgeVente.title = toutes ? "En vente au Marché : retirée si elle est vendue, dégrisée sinon"
+        : `${enVente} exemplaire(s) en vente au Marché sur ${possedes} : les autres restent dans ta collection`;
+      const liste = actif && trouve && reglages.badgePrixAchat ? achatsDe(nom, trouve[1]) : []; // 1.21 : désactivable
       if (!liste.length) { badgeDansPile(cadre, "wmd-badge-achat", null); continue; }
       const texte = `🛒 ${texteAchat(liste[0])}${liste.length > 1 ? ` (+${liste.length - 1})` : ""}`;
       const badge = badgeDansPile(cadre, "wmd-badge-achat", texte);
@@ -8062,6 +8211,20 @@ api.storage.onChanged.addListener(changements => {
   if (changements.cartesEnVente) { cartesEnVenteConnues = changements.cartesEnVente.newValue || {}; versionPage++; }
 });
 // Combien d'exemplaires de cette carte (cette rareté) sont en vente.
+// 1.21 : le nombre d'exemplaires de cette carte (cette rareté) dans ta collection en mémoire.
+let quantitesConnues = new Map();
+function retenirQuantites(collection) {
+  quantitesConnues = new Map();
+  for (const [nom, rarete, quantite] of (collection && Array.isArray(collection.cartes) ? collection.cartes : [])) {
+    const cle = `${normaliser(nom)}|${rarete}`;
+    quantitesConnues.set(cle, (quantitesConnues.get(cle) || 0) + (Number(quantite) || 0));
+  }
+}
+api.storage.local.get("collection").then(({ collection }) => retenirQuantites(collection)).catch(() => {});
+api.storage.onChanged.addListener(changements => { if (changements.collection) { retenirQuantites(changements.collection.newValue); versionPage++; } });
+function quantiteConnue(nom, rarete) {
+  return quantitesConnues.get(`${normaliser(nom)}|${rarete}`) || 0;
+}
 function nombreEnVente(nom, rarete) {
   return Object.values(cartesEnVenteConnues).filter(v => memeNom(v.nom, nom) && v.rarete === rarete).length;
 }
@@ -8465,7 +8628,7 @@ async function marquerEtiquettes() {
         const aPoser = suggestions.filter(s => !s.posee);
         aFaire = aPoser.length > 0;
         if (aFaire) texte = "🏷️ " + aPoser.map(s => `${s.icone} ${s.nom}`).join("  ");
-        else if (suggestions.length) texte = "✓ " + suggestions.map(s => s.nom).join(", ");
+        // 1.21 : une étiquette déjà posée n'est plus affichée sur la carte (avant : un badge vert « ✓ »).
       }
       badgeEtiquettes(cadre, texte, aFaire);
     }
